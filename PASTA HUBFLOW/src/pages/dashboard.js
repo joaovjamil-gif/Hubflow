@@ -9,9 +9,12 @@ export function DashboardPage({ navigate }) {
   const [clientesRecentes, setClientesRecentes] = React.useState([]);
   const [orcPendentes, setOrcPendentes] = React.useState([]);
 
+  const hoje = new Date().toISOString().slice(0, 10);
+  const hojeFormatado = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
+
   React.useEffect(() => {
     getResumoDashboard().then(setResumo);
-    listAgendaDoDia('2026-08-22').then(setAgenda);
+    listAgendaDoDia(hoje).then(setAgenda);
     clientesApi.list().then((c) => setClientesRecentes(c.slice(-3).reverse()));
     orcamentosApi.list().then((o) => setOrcPendentes(o.filter((x) => x.status !== 'aprovado' && x.status !== 'recusado').slice(0, 4)));
   }, []);
@@ -25,7 +28,7 @@ export function DashboardPage({ navigate }) {
 
   return html`
     <div>
-      <${PageHeader} eyebrow="Hoje, 22 de agosto" title="Painel do seu negócio" />
+      <${PageHeader} eyebrow=${`Hoje, ${hojeFormatado}`} title="Painel do seu negócio" />
 
       <div class="hf-stats-grid">
         <${StatCard} label="A receber" value=${resumo ? `R$ ${resumo.aReceber.toLocaleString('pt-BR')}` : '—'} tone="accent" />

@@ -20,9 +20,9 @@ export function Badge({ tone = 'grey', children }) {
 
 export function statusTone(kind, status) {
   const map = {
-    orcamento: { aprovado: 'green', enviado: 'yellow', visualizado: 'yellow', aguardando: 'yellow', rascunho: 'grey', recusado: 'red', expirado: 'red' },
+    orcamento: { aprovado: 'green', enviado: 'yellow', visualizado: 'yellow', aguardando: 'yellow', rascunho: 'grey', recusado: 'red', expirado: 'red', cancelado: 'grey' },
     os: { concluida: 'green', em_andamento: 'orange', agendada: 'yellow', aberta: 'grey', aguardando: 'yellow', cancelada: 'red' },
-    financeiro: { pago: 'green', pendente: 'yellow', atrasado: 'red' },
+    financeiro: { pago: 'green', pendente: 'yellow', atrasado: 'red', cancelado: 'grey' },
   };
   return (map[kind] && map[kind][status]) || 'grey';
 }

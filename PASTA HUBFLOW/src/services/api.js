@@ -15,6 +15,9 @@
 
 import * as mock from '../data/mockData.js';
 import { supabase } from './supabaseClient.js';
+import { quotesApi } from './quotes.js';
+import { workOrdersApi } from './workOrders.js';
+import { financeiroApi as financialApi } from './financial.js';
 
 const delay = (ms = 120) => new Promise((res) => setTimeout(res, ms));
 const uid = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -151,69 +154,97 @@ export const clientesApi = {
   },
 };
 
-export const orcamentosApi = makeCrud(mock.orcamentos, 'o');
-export const ordensServicoApi = makeCrud(mock.ordensServico, 'os');
-export const financeiroApi = makeCrud(mock.financeiroLancamentos, 'f');
 export const documentosApi = makeCrud(mock.documentos, 'd');
+
+// --- Núcleo operacional (orçamentos, OS, financeiro) — conectado ao Supabase ---
+//
+// Cliente → Orçamento → Aprovação → OS → Financeiro. A partir daqui nada é
+// mock: números, totais, transições de status e a geração automática de OS
+// e de lançamento financeiro são responsabilidade do banco (funções e
+// triggers em supabase/migrations/0014_ e 0015_), não desta camada — aqui
+// só traduzimos formato e chamamos as funções certas.
+
+export const orcamentosApi = {
+  list: () => quotesApi.list(requireOrganizationId()),
+  get: (id) => quotesApi.get(id),
+  listItems: (quoteId) => quotesApi.listItems(quoteId),
+  /** form: {cliente_id, titulo, descricao, validade, desconto, impostos, observacoes, condicoes_pagamento}; items: [{descricao, quantidade, unidade, preco_unitario, desconto}] */
+  create: (form, items) => quotesApi.create(requireOrganizationId(), form, items),
+  updateStatus: (id, status) => quotesApi.updateStatus(id, status),
+};
+
+export const ordensServicoApi = {
+  list: () => workOrdersApi.list(requireOrganizationId()),
+  get: (id) => workOrdersApi.get(id),
+  listItems: (workOrderId) => workOrdersApi.listItems(workOrderId),
+  addItem: (workOrderId, item) => workOrdersApi.addItem(workOrderId, item),
+  /** form: {cliente_id, titulo, descricao, prioridade, data_prevista, hora_prevista, endereco, valor_estimado, responsavel_id}; items: [{descricao, quantidade, preco_unitario}] */
+  create: (form, items) => workOrdersApi.create(requireOrganizationId(), form, items),
+  updateStatus: (id, status, extra) => workOrdersApi.updateStatus(id, status, extra),
+};
+
+export const financeiroApi = {
+  list: () => financialApi.list(requireOrganizationId()),
+  markAsPaid: (id, paymentMethod) => financialApi.markAsPaid(id, paymentMethod),
+};
 
 // --- Regras de negócio que atravessam módulos (o "fluxo" prometido na landing) ---
 
-/** Orçamento aprovado → gera Ordem de Serviço pré-preenchida, sem redigitação. */
+/** Orçamento aprovado → gera Ordem de Serviço pré-preenchida, sem redigitação (RPC atômica no banco). */
 export async function aprovarOrcamentoEGerarOS(orcamentoId) {
-  const orc = await orcamentosApi.update(orcamentoId, { status: 'aprovado' });
-  const os = await ordensServicoApi.create({
-    cliente_id: orc.cliente_id,
-    orcamento_id: orc.id,
-    numero: `OS ${orc.numero}`,
-    servico: orc.descricao,
-    descricao: orc.descricao,
-    responsavel: 'A definir',
-    data: null,
-    horario: null,
-    endereco: '',
-    materiais: [],
-    mao_de_obra: 0,
-    valor: orc.valor_total,
-    status: 'aberta',
-  });
-  return { orcamento: orc, ordemServico: os };
+  return quotesApi.approve(orcamentoId);
 }
 
-/** OS concluída com valor → gera lançamento financeiro pendente automaticamente. */
-export async function concluirOSEGerarLancamento(osId, vencimento) {
-  const os = await ordensServicoApi.update(osId, { status: 'concluida' });
-  if (os.valor > 0) {
-    await financeiroApi.create({
-      tipo: 'receita',
-      cliente_id: os.cliente_id,
-      ordem_servico_id: os.id,
-      orcamento_id: os.orcamento_id,
-      valor: os.valor,
-      status: 'pendente',
-      vencimento: vencimento || null,
-      pago_em: null,
-    });
-  }
-  return os;
+/** OS concluída → gera lançamento financeiro pendente automaticamente (RPC atômica no banco). */
+export async function concluirOSEGerarLancamento(osId, { valorFinal, vencimento, formaPagamento } = {}) {
+  return workOrdersApi.complete(osId, { valorFinal, vencimento, formaPagamento });
 }
 
 /** Agenda não duplica dados: é derivada diretamente das OS com data/horário definidos. */
 export async function listAgendaDoDia(data) {
-  const todas = await ordensServicoApi.list();
+  const todas = await workOrdersApi.list(requireOrganizationId());
   return todas
     .filter((os) => os.data === data && os.horario)
     .sort((a, b) => a.horario.localeCompare(b.horario));
 }
 
 export async function getResumoDashboard() {
-  const [orcs, oss, fin] = await Promise.all([orcamentosApi.list(), ordensServicoApi.list(), financeiroApi.list()]);
+  const [orcs, oss, fin] = await Promise.all([
+    quotesApi.list(requireOrganizationId()),
+    workOrdersApi.list(requireOrganizationId()),
+    financialApi.list(requireOrganizationId()),
+  ]);
   const hoje = new Date().toISOString().slice(0, 10);
   return {
     aReceber: fin.filter((f) => f.status !== 'pago').reduce((s, f) => s + f.valor, 0),
-    orcamentosPendentes: orcs.filter((o) => ['enviado', 'aguardando', 'visualizado'].includes(o.status)).length,
-    servicosHoje: oss.filter((os) => os.data === hoje || os.data === '2026-08-22').length,
-    pagamentosAtrasados: fin.filter((f) => f.status === 'atrasado').length,
+    orcamentosPendentes: orcs.filter((o) => ['enviado', 'visualizado'].includes(o.status)).length,
+    servicosHoje: oss.filter((os) => os.data === hoje).length,
+    pagamentosAtrasados: fin.filter((f) => f.status === 'atrasado' || (f.status === 'pendente' && f.vencimento && f.vencimento < hoje)).length,
   };
 }
 
-export { statusLabels } from '../data/mockData.js';
+export const statusLabels = {
+  orcamento: {
+    rascunho: 'Rascunho',
+    enviado: 'Enviado',
+    visualizado: 'Visualizado',
+    aprovado: 'Aprovado',
+    recusado: 'Recusado',
+    expirado: 'Expirado',
+    cancelado: 'Cancelado',
+  },
+  os: {
+    aberta: 'Aberta',
+    agendada: 'Agendada',
+    em_andamento: 'Em andamento',
+    aguardando: 'Aguardando',
+    concluida: 'Concluída',
+    cancelada: 'Cancelada',
+  },
+  financeiro: {
+    pendente: 'Pendente',
+    pago: 'Pago',
+    atrasado: 'Atrasado',
+    cancelado: 'Cancelado',
+  },
+};

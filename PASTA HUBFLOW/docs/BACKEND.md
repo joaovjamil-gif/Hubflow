@@ -33,19 +33,67 @@
   de orçamento hoje só tem descrição livre), então não há API conectada
   ainda para não construir uma camada sem uso real (ver "Pendências").
 
-Orçamentos, Ordens de Serviço, Agenda, Financeiro e Documentos ainda usam
-os mocks em `src/data/mockData.js` / `src/services/api.js` — isso é
-proposital, é o escopo da Fase 6 em diante.
+- **Fase 6 concluída**: núcleo operacional completo — Cliente → Orçamento →
+  Aprovação → OS → Financeiro — conectado ao Supabase, com regras de
+  negócio movidas para o banco (não para o cliente):
+  - `supabase/migrations/0014_operational_core_hardening.sql`: numeração
+    automática por organização (`org_sequences`/`next_sequence_value`),
+    subtotal de item sempre calculado no servidor
+    (`quote_items.subtotal`/`work_order_items.subtotal`, este último
+    campo novo), total do orçamento sempre recalculado a partir da soma
+    real dos itens (nunca um valor digitado à mão), transições de status
+    validadas por trigger tanto para `quotes` quanto para `work_orders`
+    (uma UPDATE para um status inválido é rejeitada pelo Postgres, não só
+    escondida na UI), e histórico automático (`activity_logs`) em
+    `customers`/`quotes`/`work_orders`/`accounts_receivable` via trigger
+    genérico — nenhuma página precisa lembrar de registrar nada.
+  - `supabase/migrations/0015_...` e `0016_...` (hardening): 4 funções de
+    negócio atômicas — `create_quote`, `approve_quote`, `create_work_order`,
+    `complete_work_order` — cada uma faz múltiplas escritas relacionadas
+    numa única transação (orçamento + itens; orçamento aprovado + OS +
+    itens copiados; OS + lançamento financeiro), sempre respeitando RLS
+    (rodam como o usuário chamador, não com privilégio elevado).
+  - `src/services/quotes.js`, `workOrders.js`, `financial.js`, `team.js`,
+    `activity.js`: novos módulos de acesso a dados; `src/services/api.js`
+    passou a reexportar `orcamentosApi`/`ordensServicoApi`/`financeiroApi`
+    conectados a eles, mantendo `aprovarOrcamentoEGerarOS`/
+    `concluirOSEGerarLancamento`/`listAgendaDoDia`/`getResumoDashboard`
+    como as funções que atravessam módulos.
+  - `pages/orcamentos.js` e `pages/ordensServico.js` foram reescritas (a
+    pedido explícito, para não simplificar a OS): itens de verdade
+    (adicionar/remover, com subtotal calculado pelo banco), ciclo de vida
+    completo do orçamento (rascunho → enviado → aprovado/recusado/
+    cancelado), OS com prioridade, responsável (selecionável entre os
+    membros da organização), agendamento editável a qualquer momento,
+    adição de itens durante a execução, todas as transições de status
+    intermediárias como botões, conclusão com valor final/vencimento/forma
+    de pagamento num modal dedicado, e um card de histórico (via
+    `activity_logs`) em ambas as telas.
+  - `pages/financeiro.js` conectado a `accounts_receivable` real, com
+    status "atrasado" calculado no cliente a partir do vencimento (não
+    depende de um job para marcar registros como atrasados), e ação de
+    "Marcar como pago".
+  - Corrigido também: `dashboard.js` usava uma data hardcoded
+    (`'2026-08-22'`) herdada do mock para "Agenda de hoje" — agora usa a
+    data real do dia.
 
-### Inconsistência transitória esperada (Clientes real + resto ainda mock)
+### Limitação de validação conhecida
 
-Os orçamentos/OS/financeiro mock em `mockData.js` referenciam clientes
-fake (`c1`..`c4`) que não existem mais como registros reais — agora que
-`clientesApi` fala com o Supabase, esses IDs não batem com nenhum cliente
-de verdade. Isso é esperado durante a transição: o nome do cliente vai
-aparecer como "—" nessas telas mock até a Fase 6 conectar Orçamentos/OS/
-Financeiro também. O formulário de "Novo orçamento" já usa a lista real de
-clientes (vazia até você cadastrar um em Clientes).
+Não foi possível simular uma sessão real do PostgREST (`SET ROLE
+authenticated` + `request.jwt.claims`) através da ferramenta de SQL desta
+sessão para provar o RLS "ao vivo" como um usuário autenticado — mesmo um
+teste mínimo com uma tabela nova e uma policy trivial falhou de um jeito
+que não consegui diagnosticar por completo (parece uma particularidade de
+como essa ferramenta executa múltiplos statements, não do schema em si).
+Em vez disso, a validação desta fase combinou: (1) o fluxo de negócio
+completo rodando com uma identidade real (`auth.uid()` de um usuário de
+teste, membro de uma organização de teste) — que passou por todas as
+funções e triggers novos sem bypass de RLS nas funções invoker; e (2) a
+definição de cada policy nova conferida diretamente em `pg_policies`,
+seguindo exatamente o mesmo padrão (`is_org_member`/`is_org_admin`) já
+validado nas fases anteriores. Um teste manual no navegador (login real +
+criar cliente/orçamento/OS) continua sendo a validação que falta e que só
+dá para fazer fora deste sandbox.
 
 ## Tabelas criadas (21) + 1 bucket de Storage
 
@@ -101,15 +149,20 @@ clientes (vazia até você cadastrar um em Clientes).
 - `IA`: tabela `ai_requests` pronta para registrar solicitações, mas
   nenhuma chamada externa de IA foi implementada (Fase 9, e apenas
   mediante decisão explícita de qual modelo/API usar).
-- `Configurações`: o formulário de perfil do negócio não salva nada hoje;
-  vai passar a gravar em `organizations` quando a Fase 5 conectar essa
-  página.
-- Edição/exclusão de clientes, orçamentos e OS: a API (Fase 5+) já vai
-  oferecer `update`/soft-delete, mas a UI atual só tem "criar" e "listar" —
-  os botões de editar/excluir precisarão ser adicionados às páginas quando
-  isso for priorizado.
-- Visualização de agenda por dia/semana/mês: o schema (`starts_at`,
-  `ends_at`, `all_day`) já suporta, a página `agenda.js` hoje é só uma lista.
+- Edição de campos livres em orçamento/OS já aprovados (ex.: mudar a
+  descrição de um orçamento depois de criado, editar um item já salvo em
+  vez de só adicionar/remover) e exclusão (hard/soft delete) de clientes,
+  orçamentos e OS pela UI: as APIs já suportam o necessário para o fluxo
+  principal (criar, mudar status, adicionar item), mas não há botão de
+  "editar" genérico nem de "excluir" em nenhuma dessas três telas ainda.
+- Catálogo de serviços (`services`): continua sem UI — o seletor de item em
+  Orçamento/OS é texto livre, não busca de um catálogo pré-cadastrado.
+- Fornecedores (`suppliers`) e contas a pagar (`accounts_payable`): schema
+  pronto (Fase 2), nenhuma tela ainda.
+- Visualização de agenda por dia/semana/mês: o schema de `calendar_events`
+  (`starts_at`, `ends_at`, `all_day`) já suporta, mas a página `agenda.js`
+  ainda deriva a lista diretamente das OS agendadas, sem usar
+  `calendar_events` nem oferecer essas visualizações (Fase 8).
 
 ## Validação feita na Fase 3
 
