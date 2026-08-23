@@ -1,9 +1,10 @@
 // src/pages/ordensServico.js
 import React from 'https://esm.sh/react@18';
-import { html, PageHeader, Table, Badge, statusTone, EmptyState, Card, Button, Modal, Field, Input, Select, Textarea } from '../components/ui.js';
+import { html, PageHeader, Table, Badge, statusTone, EmptyState, Card, Button, Modal, Field, Input, Select, Textarea, Timeline } from '../components/ui.js';
 import { ordensServicoApi, clientesApi, catalogoApi, concluirOSEGerarLancamento, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
 import { listOrganizationMembers } from '../services/team.js';
+import { DocumentsPanel } from '../components/documentsPanel.js';
 
 const PRIORIDADE_LABEL = { baixa: 'Baixa', media: 'Média', alta: 'Alta', urgente: 'Urgente' };
 const PRIORIDADE_TONE = { baixa: 'grey', media: 'yellow', alta: 'orange', urgente: 'red' };
@@ -455,18 +456,7 @@ function OsDetalhe({ os, nomeCliente, membros, catalogo = [], onVoltar, onAvisar
 
           <${Card}>
             <h3 style=${{ marginBottom: 12 }}>Histórico</h3>
-            ${historico.length === 0
-              ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Sem eventos ainda.</p>`
-              : html`<div style=${{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  ${historico.map(
-                    (h) => html`
-                      <div key=${h.id} style=${{ fontSize: '0.85rem', borderBottom: '1px solid var(--border-soft)', paddingBottom: 8 }}>
-                        <strong>${h.acao}</strong> — ${h.descricao}
-                        <div style=${{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>${new Date(h.quando).toLocaleString('pt-BR')}</div>
-                      </div>
-                    `
-                  )}
-                </div>`}
+            <${Timeline} items=${historico} emptyLabel="Sem eventos ainda." />
           <//>
         </div>
 
@@ -517,6 +507,7 @@ function OsDetalhe({ os, nomeCliente, membros, catalogo = [], onVoltar, onAvisar
             <${Badge} tone=${statusTone('os', atual.status)}>${statusLabels.os[atual.status]}<//>
             <p style=${{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 14 }}>${atual.descricao}</p>
           <//>
+          <${DocumentsPanel} entityType="work_order" entityId=${atual.id} />
         </div>
       </div>
 

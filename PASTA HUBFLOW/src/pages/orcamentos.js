@@ -1,8 +1,9 @@
 // src/pages/orcamentos.js
 import React from 'https://esm.sh/react@18';
-import { html, PageHeader, Button, Table, Badge, statusTone, EmptyState, Field, Input, Textarea, Select, Modal, Card } from '../components/ui.js';
+import { html, PageHeader, Button, Table, Badge, statusTone, EmptyState, Field, Input, Textarea, Select, Modal, Card, Timeline } from '../components/ui.js';
 import { orcamentosApi, clientesApi, catalogoApi, aprovarOrcamentoEGerarOS, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
+import { DocumentsPanel } from '../components/documentsPanel.js';
 
 const ITEM_VAZIO = { servico_id: '', descricao: '', quantidade: 1, unidade: 'un', preco_unitario: 0, desconto: 0 };
 
@@ -309,18 +310,7 @@ function OrcamentoDetalhe({ orcamento, nomeCliente, onVoltar, onMarcarEnviado, o
 
           <${Card}>
             <h3 style=${{ marginBottom: 12 }}>Histórico</h3>
-            ${historico.length === 0
-              ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Sem eventos ainda.</p>`
-              : html`<div style=${{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  ${historico.map(
-                    (h) => html`
-                      <div key=${h.id} style=${{ fontSize: '0.85rem', borderBottom: '1px solid var(--border-soft)', paddingBottom: 8 }}>
-                        <strong>${h.acao}</strong> — ${h.descricao}
-                        <div style=${{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>${new Date(h.quando).toLocaleString('pt-BR')}</div>
-                      </div>
-                    `
-                  )}
-                </div>`}
+            <${Timeline} items=${historico} emptyLabel="Sem eventos ainda." />
           <//>
         </div>
 
@@ -338,6 +328,7 @@ function OrcamentoDetalhe({ orcamento, nomeCliente, onVoltar, onMarcarEnviado, o
               Criado em: ${orcamento.criado_em}
             </p>
           <//>
+          <${DocumentsPanel} entityType="quote" entityId=${orcamento.id} />
         </div>
       </div>
     </div>

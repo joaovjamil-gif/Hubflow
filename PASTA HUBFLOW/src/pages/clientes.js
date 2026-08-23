@@ -1,8 +1,9 @@
 // src/pages/clientes.js
 import React from 'https://esm.sh/react@18';
-import { html, PageHeader, Button, Table, Badge, statusTone, Modal, Field, Input, Select, Textarea, EmptyState, Card } from '../components/ui.js';
-import { clientesApi, orcamentosApi, ordensServicoApi, financeiroApi, contatosClienteApi, listDocumentosDaEntidade, statusLabels } from '../services/api.js';
+import { html, PageHeader, Button, Table, Badge, statusTone, Modal, Field, Input, Select, Textarea, EmptyState, Card, Timeline } from '../components/ui.js';
+import { clientesApi, orcamentosApi, ordensServicoApi, financeiroApi, contatosClienteApi, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
+import { DocumentsPanel } from '../components/documentsPanel.js';
 
 const FORM_VAZIO = { nome: '', telefone: '', email: '', endereco: '', observacoes: '', status: 'active' };
 const STATUS_OPTIONS = [
@@ -140,7 +141,6 @@ function ClienteDetalhe({ cliente, onVoltar, onEditar }) {
   const [os, setOs] = React.useState([]);
   const [financeiro, setFinanceiro] = React.useState([]);
   const [contatos, setContatos] = React.useState([]);
-  const [documentos, setDocumentos] = React.useState([]);
   const [historico, setHistorico] = React.useState([]);
   const [novoContato, setNovoContato] = React.useState({ nome: '', funcao: '', telefone: '', email: '' });
   const [erro, setErro] = React.useState('');
@@ -150,7 +150,6 @@ function ClienteDetalhe({ cliente, onVoltar, onEditar }) {
     ordensServicoApi.list().then((all) => setOs(all.filter((o) => o.cliente_id === cliente.id)));
     financeiroApi.list().then((all) => setFinanceiro(all.filter((f) => f.cliente_id === cliente.id)));
     contatosClienteApi.list(cliente.id).then(setContatos);
-    listDocumentosDaEntidade('customer', cliente.id).then(setDocumentos).catch(() => setDocumentos([]));
     listActivity('customers', cliente.id).then(setHistorico);
   }
   React.useEffect(carregar, [cliente.id]);
@@ -231,27 +230,13 @@ function ClienteDetalhe({ cliente, onVoltar, onEditar }) {
             : financeiro.map((f) => html`<div key=${f.id} style=${{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}><span>${f.descricao}</span><span>R$ ${f.valor.toFixed(2)} · ${statusLabels.financeiro[f.status]}</span></div>`)}
         <//>
 
-        <${Card}>
-          <h3 style=${{ marginBottom: 12 }}>Documentos</h3>
-          ${documentos.length === 0
-            ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Nenhum documento anexado ainda — upload chega numa próxima etapa.</p>`
-            : documentos.map((d) => html`<div key=${d.id} style=${{ fontSize: '0.85rem', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}>${d.original_name}</div>`)}
-        <//>
+        <${DocumentsPanel} entityType="customer" entityId=${cliente.id} />
       </div>
 
       <div style=${{ marginTop: 20 }}>
         <${Card}>
           <h3 style=${{ marginBottom: 12 }}>Histórico</h3>
-          ${historico.length === 0
-            ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Sem eventos ainda.</p>`
-            : html`<div style=${{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                ${historico.map((h) => html`
-                  <div key=${h.id} style=${{ fontSize: '0.85rem', borderBottom: '1px solid var(--border-soft)', paddingBottom: 8 }}>
-                    <strong>${h.acao}</strong> — ${h.descricao}
-                    <div style=${{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>${new Date(h.quando).toLocaleString('pt-BR')}</div>
-                  </div>
-                `)}
-              </div>`}
+          <${Timeline} items=${historico} emptyLabel="Sem eventos ainda." />
         <//>
       </div>
     </div>

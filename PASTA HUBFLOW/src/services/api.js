@@ -1,19 +1,12 @@
 // src/services/api.js
 //
 // Camada de acesso a dados. TODA a interface (componentes/páginas) fala com
-// este arquivo — nunca importa mockData diretamente. Isso é o que torna a
-// troca Mock → Supabase uma mudança de UM arquivo, não de toda a aplicação.
-//
-// Cada função é assíncrona (retorna Promise) mesmo hoje sendo síncrona por
-// baixo dos panos, para as entidades que ainda usam mock — assim o formato
-// de chamada já é idêntico ao que é usado com o client real do Supabase.
-//
-// ⚠️ Estado em memória (só para o que ainda é mock): os arrays abaixo são
-// mutados diretamente nas funções create/update/delete. Isso simula
-// persistência DURANTE a sessão, mas não sobrevive a um reload — não é
-// banco de dados. `clientesApi` já não é mock — ver abaixo.
+// este arquivo, nunca diretamente com um services/*.js específico — isso
+// mantém a organização atual (`requireOrganizationId()`) e o formato de
+// dados (português, ver *FromDb/*ToDb em cada services/*.js) centralizados
+// num só lugar. Todas as entidades já são reais (Supabase Postgres/Storage/
+// Auth) — não há mais dado mock nesta aplicação.
 
-import * as mock from '../data/mockData.js';
 import { supabase } from './supabaseClient.js';
 import { quotesApi } from './quotes.js';
 import { workOrdersApi } from './workOrders.js';
@@ -22,36 +15,8 @@ import { catalogoApi as catalogService } from './catalog.js';
 import { fornecedoresApi as suppliersService } from './suppliers.js';
 import { contasPagarApi as payablesService } from './payables.js';
 import { agendaApi as calendarService } from './calendar.js';
-
-const delay = (ms = 120) => new Promise((res) => setTimeout(res, ms));
-const uid = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
-
-function makeCrud(store, prefix) {
-  return {
-    list: async () => { await delay(); return [...store]; },
-    get: async (id) => { await delay(); return store.find((r) => r.id === id) || null; },
-    create: async (data) => {
-      await delay();
-      const record = { id: uid(prefix), criado_em: new Date().toISOString().slice(0, 10), ...data };
-      store.push(record);
-      return record;
-    },
-    update: async (id, patch) => {
-      await delay();
-      const idx = store.findIndex((r) => r.id === id);
-      if (idx === -1) throw new Error(`${prefix} ${id} não encontrado`);
-      store[idx] = { ...store[idx], ...patch };
-      return store[idx];
-    },
-    remove: async (id) => {
-      await delay();
-      const idx = store.findIndex((r) => r.id === id);
-      if (idx === -1) return false;
-      store.splice(idx, 1);
-      return true;
-    },
-  };
-}
+import { documentsApi as documentsService } from './documents.js';
+import { notificationsApi as notificationsService } from './notifications.js';
 
 // --- Organização atual (multi-tenant) ---------------------------------
 //
@@ -210,19 +175,25 @@ export const contatosClienteApi = {
   },
 };
 
-/** Documentos já anexados a uma entidade (leitura — upload ainda pendente, ver docs/BACKEND.md). */
+/** Documentos anexados a uma entidade — Supabase Storage real (ver services/documents.js). */
 export async function listDocumentosDaEntidade(entityType, entityId) {
-  const { data, error } = await supabase
-    .from('documents')
-    .select('*')
-    .eq('entity_type', entityType)
-    .eq('entity_id', entityId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data;
+  return documentsService.list(entityType, entityId);
 }
 
-export const documentosApi = makeCrud(mock.documentos, 'd');
+export const documentosApi = {
+  list: (entityType, entityId) => documentsService.list(entityType, entityId),
+  listRecent: (opts) => documentsService.listRecent(requireOrganizationId(), opts),
+  upload: (entityType, entityId, file, meta) => documentsService.upload(requireOrganizationId(), entityType, entityId, file, meta),
+  getSignedUrl: (doc) => documentsService.getSignedUrl(doc),
+  remove: (doc) => documentsService.remove(doc),
+};
+
+export const notificacoesApi = {
+  list: (opts) => notificationsService.list(requireOrganizationId(), opts),
+  unreadCount: () => notificationsService.unreadCount(requireOrganizationId()),
+  markRead: (id) => notificationsService.markRead(id),
+  markAllRead: () => notificationsService.markAllRead(requireOrganizationId()),
+};
 
 // --- Catálogo de serviços, fornecedores, contas a pagar, agenda ---------
 export const catalogoApi = {

@@ -1,8 +1,9 @@
 // src/pages/fornecedores.js
 import React from 'https://esm.sh/react@18';
-import { html, PageHeader, Button, Table, Badge, statusTone, EmptyState, Field, Input, Textarea, Modal, Card } from '../components/ui.js';
+import { html, PageHeader, Button, Table, Badge, statusTone, EmptyState, Field, Input, Textarea, Modal, Card, Timeline } from '../components/ui.js';
 import { fornecedoresApi, contasPagarApi, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
+import { DocumentsPanel } from '../components/documentsPanel.js';
 
 const FORM_VAZIO = { nome: '', razao_social: '', documento: '', email: '', telefone: '', endereco: '', categoria: '', observacoes: '' };
 
@@ -116,13 +117,12 @@ function FornecedorDetalhe({ fornecedor, onVoltar }) {
             : contas.map((c) => html`<div key=${c.id} style=${{ fontSize: '0.85rem', display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}><span>${c.descricao}</span><span>R$ ${c.valor.toFixed(2)} · ${c.status}</span></div>`)}
         <//>
       </div>
-      <div style=${{ marginTop: 20 }}>
+      <div style=${{ marginTop: 20, display: 'grid', gap: 20, gridTemplateColumns: '1fr 1fr' }}>
         <${Card}>
           <h3 style=${{ marginBottom: 12 }}>Histórico</h3>
-          ${historico.length === 0
-            ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Sem eventos ainda.</p>`
-            : historico.map((h) => html`<div key=${h.id} style=${{ fontSize: '0.85rem', borderBottom: '1px solid var(--border-soft)', padding: '6px 0' }}><strong>${h.acao}</strong> — ${h.descricao}</div>`)}
+          <${Timeline} items=${historico} emptyLabel="Sem eventos ainda." />
         <//>
+        <${DocumentsPanel} entityType="supplier" entityId=${fornecedor.id} />
       </div>
     </div>
   `;

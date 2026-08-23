@@ -129,3 +129,72 @@ export function StatCard({ label, value, tone = 'default' }) {
     <//>
   `;
 }
+
+export function Spinner({ label = 'Carregando...' }) {
+  return html`<div class="hf-spinner"><span class="hf-spinner__dot"></span>${label}</div>`;
+}
+
+/**
+ * Painel flutuante genérico (usado por notificações, menus etc.). O
+ * disparador (botão) fica fora deste componente, dentro de um wrapper com
+ * `class="hf-dropdown-wrap"` (position: relative) — ver notificationsBell.js
+ * para um exemplo completo.
+ */
+export function Dropdown({ open, onClose, align = 'right', className = '', children }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    function onDocClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    }
+    function onEsc(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open, onClose]);
+  if (!open) return null;
+  return html`<div ref=${ref} class=${`hf-dropdown hf-dropdown--${align} ${className}`}>${children}</div>`;
+}
+
+/** Texto de apoio ao passar o mouse/focar — usa CSS puro (::after), sem lib externa. */
+export function Tooltip({ label, children }) {
+  return html`<span class="hf-tooltip" data-tooltip=${label} tabIndex="0">${children}</span>`;
+}
+
+const ACTIVITY_TONE = {
+  Criado: 'green',
+  Aprovado: 'green',
+  Concluído: 'green',
+  Atualizado: 'yellow',
+  Recusado: 'red',
+  Cancelado: 'red',
+  Excluído: 'red',
+};
+
+/** Histórico de uma entidade em formato de linha do tempo vertical (ver services/activity.js). */
+export function Timeline({ items, emptyLabel = 'Nenhum evento registrado ainda.' }) {
+  if (!items || !items.length) return html`<p class="hf-table-empty">${emptyLabel}</p>`;
+  return html`
+    <div class="hf-timeline">
+      ${items.map(
+        (it) => html`
+          <div class="hf-timeline__item" key=${it.id}>
+            <div class=${`hf-timeline__dot hf-timeline__dot--${ACTIVITY_TONE[it.acao] || 'grey'}`}></div>
+            <div class="hf-timeline__content">
+              <div class="hf-timeline__head">
+                <strong>${it.acao}</strong>
+                <span class="hf-timeline__time">${new Date(it.quando).toLocaleString('pt-BR')}</span>
+              </div>
+              ${it.descricao && html`<p>${it.descricao}</p>`}
+            </div>
+          </div>
+        `
+      )}
+    </div>
+  `;
+}
