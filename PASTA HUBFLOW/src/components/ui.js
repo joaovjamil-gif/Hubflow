@@ -134,6 +134,58 @@ export function Spinner({ label = 'Carregando...' }) {
   return html`<div class="hf-spinner"><span class="hf-spinner__dot"></span>${label}</div>`;
 }
 
+/** Gráfico de barras verticais simples, em CSS puro — sem lib externa. `data`: [{label, value, color?}]. */
+export function BarChart({ data, height = 160, formatValue = (v) => v, emptyLabel = 'Sem dados ainda.' }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  if (data.every((d) => !d.value)) return html`<p class="hf-table-empty">${emptyLabel}</p>`;
+  return html`
+    <div class="hf-barchart" style=${{ height: `${height}px` }}>
+      ${data.map(
+        (d) => html`
+          <div class="hf-barchart__col" key=${d.label}>
+            <div class="hf-barchart__value">${formatValue(d.value)}</div>
+            <div class="hf-barchart__bar" style=${{ height: `${Math.max(3, (d.value / max) * 100)}%`, background: d.color || 'var(--accent)' }}></div>
+            <div class="hf-barchart__label">${d.label}</div>
+          </div>
+        `
+      )}
+    </div>
+  `;
+}
+
+/** Gráfico de rosca via conic-gradient (CSS puro). `segments`: [{label, value, color}]. */
+export function DonutChart({ segments, size = 132, thickness = 18, emptyLabel = 'Sem dados ainda.' }) {
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  if (!total) return html`<p class="hf-table-empty">${emptyLabel}</p>`;
+  let acc = 0;
+  const stops = segments
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const start = (acc / total) * 100;
+      acc += s.value;
+      const end = (acc / total) * 100;
+      return `${s.color} ${start}% ${end}%`;
+    })
+    .join(', ');
+  return html`
+    <div class="hf-donut">
+      <div class="hf-donut__ring" style=${{ width: size, height: size, background: `conic-gradient(${stops})` }}>
+        <div class="hf-donut__hole" style=${{ inset: `${thickness}px` }}></div>
+      </div>
+      <div class="hf-donut__legend">
+        ${segments.map(
+          (s) => html`
+            <div class="hf-donut__legend-item" key=${s.label}>
+              <span class="hf-donut__dot" style=${{ background: s.color }}></span>
+              ${s.label} <span class="hf-donut__legend-value">(${s.value})</span>
+            </div>
+          `
+        )}
+      </div>
+    </div>
+  `;
+}
+
 /**
  * Painel flutuante genérico (usado por notificações, menus etc.). O
  * disparador (botão) fica fora deste componente, dentro de um wrapper com

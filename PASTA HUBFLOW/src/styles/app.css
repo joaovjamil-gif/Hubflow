@@ -193,6 +193,29 @@ a { color: inherit; }
 .hf-doc-item__meta { font-size: 0.74rem; color: var(--text-tertiary); margin-top: 2px; }
 .hf-doc-item__actions { display: flex; gap: 4px; flex-shrink: 0; }
 
+/* --- Gráficos (CSS puro) --- */
+.hf-barchart { display: flex; align-items: flex-end; gap: 14px; padding-top: 10px; }
+.hf-barchart__col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.hf-barchart__value { font-size: 0.76rem; color: var(--text-secondary); font-family: var(--font-mono); margin-bottom: 6px; white-space: nowrap; }
+.hf-barchart__bar { width: 100%; max-width: 46px; border-radius: 5px 5px 0 0; transition: height .3s ease-out; min-height: 3px; }
+.hf-barchart__label { margin-top: 8px; font-size: 0.74rem; color: var(--text-tertiary); text-align: center; }
+
+.hf-donut { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.hf-donut__ring { border-radius: 50%; position: relative; flex-shrink: 0; }
+.hf-donut__hole { position: absolute; border-radius: 50%; background: var(--bg-elevated); }
+.hf-donut__legend { display: flex; flex-direction: column; gap: 6px; }
+.hf-donut__legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-secondary); }
+.hf-donut__dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.hf-donut__legend-value { color: var(--text-tertiary); }
+
+/* --- Feed de atividade (dashboard) --- */
+.hf-activity-feed { display: flex; flex-direction: column; gap: 2px; }
+.hf-activity-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); font-size: 0.83rem; }
+.hf-activity-item:last-child { border-bottom: none; }
+.hf-activity-item__tag { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; color: var(--accent); flex-shrink: 0; width: 92px; }
+.hf-activity-item__body { flex: 1; min-width: 0; color: var(--text-secondary); }
+.hf-activity-item__time { color: var(--text-tertiary); font-size: 0.72rem; font-family: var(--font-mono); white-space: nowrap; }
+
 /* --- Sidebar: grupos de navegação --- */
 .hf-nav-group { margin-top: 14px; }
 .hf-nav-group:first-child { margin-top: 0; }

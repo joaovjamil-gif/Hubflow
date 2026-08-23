@@ -1,6 +1,6 @@
 // src/pages/financeiro.js
 import React from 'https://esm.sh/react@18';
-import { html, PageHeader, StatCard, Table, Badge, statusTone, EmptyState, Button, Modal, Field, Input, Select, Textarea } from '../components/ui.js';
+import { html, PageHeader, StatCard, Table, Badge, statusTone, EmptyState, Button, Modal, Field, Input, Select, Textarea, BarChart, Card } from '../components/ui.js';
 import { financeiroApi, contasPagarApi, fornecedoresApi, clientesApi, statusLabels } from '../services/api.js';
 
 const FORMA_PAGAMENTO_OPTIONS = [
@@ -175,6 +175,22 @@ export function FinanceiroPage() {
       `}
 
       ${aba === 'fluxo' && html`
+        <${Card} style=${{ marginBottom: 20 }}>
+          <h3 style=${{ marginBottom: 4 }}>Receitas x despesas</h3>
+          <p style=${{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginBottom: 10 }}>Calculado a partir dos lançamentos reais de contas a receber/pagar.</p>
+          <${BarChart}
+            height=${180}
+            formatValue=${(v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            data=${[
+              { label: 'Recebido', value: recebido, color: '#33C17A' },
+              { label: 'A receber', value: aReceber, color: '#E8B339' },
+              { label: 'Vencido (a receber)', value: vencidoReceber, color: '#E8503A' },
+              { label: 'Pago', value: pago, color: '#FF5A1F' },
+              { label: 'A pagar', value: aPagar, color: '#9C9BA3' },
+              { label: 'Vencido (a pagar)', value: vencidoPagar, color: '#E8503A' },
+            ]}
+          />
+        <//>
         <div style=${{ display: 'grid', gap: 20, gridTemplateColumns: '1fr 1fr' }}>
           <div class="hf-card">
             <h3 style=${{ marginBottom: 14 }}>Receitas</h3>

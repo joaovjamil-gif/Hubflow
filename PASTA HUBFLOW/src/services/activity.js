@@ -32,3 +32,30 @@ export async function listActivity(entityType, entityId) {
     quando: row.created_at,
   }));
 }
+
+const ENTITY_LABELS = {
+  customers: 'Cliente',
+  quotes: 'Orçamento',
+  work_orders: 'Ordem de serviço',
+  accounts_receivable: 'Conta a receber',
+  accounts_payable: 'Conta a pagar',
+  suppliers: 'Fornecedor',
+};
+
+/** Feed de atividade de toda a organização (dashboard) — mesma tabela, sem filtrar por uma entidade só. */
+export async function listRecentActivity(organizationId, limit = 12) {
+  const { data, error } = await supabase
+    .from('activity_logs')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data.map((row) => ({
+    id: row.id,
+    acao: ACTION_LABELS[row.action] || row.action,
+    entidade: ENTITY_LABELS[row.entity_type] || row.entity_type,
+    descricao: row.description,
+    quando: row.created_at,
+  }));
+}

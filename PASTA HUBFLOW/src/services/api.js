@@ -319,6 +319,11 @@ export async function getResumoDashboard() {
     fluxoLiquido:
       receber.filter((f) => f.status === 'pago').reduce((s, f) => s + f.valor, 0) -
       pagar.filter((p) => p.status === 'pago').reduce((s, p) => s + p.valor, 0),
+    // Distribuição de OS por status — reaproveita a mesma lista já buscada acima, sem query extra.
+    osPorStatus: oss.reduce((acc, os) => {
+      acc[os.status] = (acc[os.status] || 0) + 1;
+      return acc;
+    }, {}),
   };
 }
 
