@@ -1,7 +1,7 @@
 // src/App.js
 import React from 'https://esm.sh/react@18';
 import { html } from './components/ui.js';
-import { LoginPage, CadastroPage } from './pages/auth.js';
+import { LoginPage, CadastroPage, NovaSenhaPage } from './pages/auth.js';
 import { DashboardPage } from './pages/dashboard.js';
 import { ClientesPage } from './pages/clientes.js';
 import { OrcamentosPage } from './pages/orcamentos.js';
@@ -11,6 +11,8 @@ import { FinanceiroPage } from './pages/financeiro.js';
 import { DocumentosPage } from './pages/documentos.js';
 import { IAPage } from './pages/ia.js';
 import { ConfiguracoesPage } from './pages/configuracoes.js';
+import { supabase } from './services/supabaseClient.js';
+import { getMyProfile, getOrEnsureOrganization, signOut } from './services/auth.js';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '▤' },
@@ -47,7 +49,7 @@ function useHashRoute() {
   return [route, navigate];
 }
 
-function AppShell({ route, navigate, children }) {
+function AppShell({ route, navigate, onSair, profile, children }) {
   return html`
     <div class="hf-app">
       <aside class="hf-sidebar">
@@ -61,12 +63,12 @@ function AppShell({ route, navigate, children }) {
             `
           )}
         </nav>
-        <div class="hf-sidebar__footer">Dados de exemplo — sessão local, não persistente.</div>
+        <div class="hf-sidebar__footer">${profile?.full_name || profile?.email || 'Sessão autenticada'}</div>
       </aside>
       <div class="hf-main">
         <div class="hf-topbar">
           <span class="hf-topbar__title">${NAV_ITEMS.find((i) => i.to === route)?.label || ''}</span>
-          <a href="#/login" class="hf-btn hf-btn--ghost" style=${{ padding: '6px 12px', fontSize: '0.8rem' }}>Sair</a>
+          <button onClick=${onSair} class="hf-btn hf-btn--ghost" style=${{ padding: '6px 12px', fontSize: '0.8rem' }}>Sair</button>
         </div>
         <div class="hf-content">${children}</div>
       </div>
@@ -74,16 +76,91 @@ function AppShell({ route, navigate, children }) {
   `;
 }
 
+/**
+ * Estado de autenticação da aplicação inteira. Carrega a sessão do Supabase
+ * uma vez, escuta mudanças (login/logout/token renovado/recuperação de
+ * senha) e, quando autenticado, garante profile + organização do usuário.
+ */
+function useAuth() {
+  const [state, setState] = React.useState({ status: 'loading', session: null, profile: null, organization: null });
+
+  const carregarPerfilEOrganizacao = React.useCallback(async (session) => {
+    try {
+      const [profile, organization] = await Promise.all([getMyProfile(), getOrEnsureOrganization()]);
+      setState({ status: 'authenticated', session, profile, organization });
+    } catch (err) {
+      console.error('Falha ao carregar perfil/organização:', err);
+      setState({ status: 'authenticated', session, profile: null, organization: null });
+    }
+  }, []);
+
+  React.useEffect(() => {
+    let ativo = true;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!ativo) return;
+      if (session) carregarPerfilEOrganizacao(session);
+      else setState({ status: 'anonymous', session: null, profile: null, organization: null });
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!ativo) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        window.location.hash = '/nova-senha';
+        return;
+      }
+      if (session) carregarPerfilEOrganizacao(session);
+      else setState({ status: 'anonymous', session: null, profile: null, organization: null });
+    });
+
+    return () => {
+      ativo = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [carregarPerfilEOrganizacao]);
+
+  return state;
+}
+
 export function App() {
   const [route, navigate] = useHashRoute();
+  const auth = useAuth();
 
-  if (route === '/login') return html`<${LoginPage} onEnter=${() => navigate('/dashboard')} />`;
-  if (route === '/cadastro') return html`<${CadastroPage} onEnter=${() => navigate('/dashboard')} />`;
+  if (route === '/nova-senha') {
+    return html`<${NovaSenhaPage} onConcluido=${() => navigate('/dashboard')} />`;
+  }
+
+  if (auth.status === 'loading') {
+    return html`
+      <div class="hf-auth">
+        <div class="hf-auth-card">
+          <div class="hf-sidebar__logo" style=${{ padding: 0 }}><span class="hf-sidebar__logo-mark">H</span>HubFlow</div>
+          <p style=${{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '8px' }}>Carregando...</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (auth.status === 'anonymous') {
+    if (route === '/cadastro') return html`<${CadastroPage} onEnter=${() => navigate('/dashboard')} />`;
+    return html`<${LoginPage} onEnter=${() => navigate('/dashboard')} />`;
+  }
+
+  // Autenticado: /login e /cadastro não fazem sentido mais — manda para o painel.
+  if (route === '/login' || route === '/cadastro') {
+    navigate('/dashboard');
+    return null;
+  }
+
+  async function handleSair() {
+    await signOut();
+    navigate('/login');
+  }
 
   const Page = PAGES[route] || DashboardPage;
   return html`
-    <${AppShell} route=${route} navigate=${navigate}>
-      <${Page} navigate=${navigate} />
+    <${AppShell} route=${route} navigate=${navigate} onSair=${handleSair} profile=${auth.profile}>
+      <${Page} navigate=${navigate} profile=${auth.profile} organization=${auth.organization} />
     <//>
   `;
 }

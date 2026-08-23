@@ -2,14 +2,26 @@
 
 ## Status
 
-Fase 2 concluída: schema completo do produto criado e aplicado no projeto
-Supabase `Hubflow` (`edjsleldeautikzccfwt`, região `sa-east-1`), com RLS
-multiempresa em todas as tabelas. As migrations estão versionadas em
-`supabase/migrations/` e foram aplicadas na ordem numérica (0001 → 0013).
+- **Fase 2 concluída**: schema completo do produto criado e aplicado no
+  projeto Supabase `Hubflow` (`edjsleldeautikzccfwt`, região `sa-east-1`),
+  com RLS multiempresa em todas as tabelas. Migrations versionadas em
+  `supabase/migrations/` (0001 → 0013).
+- **Fase 3 concluída**: autenticação real ligada. `src/services/supabaseClient.js`
+  cria o client único; `src/services/auth.js` centraliza signUp/signIn/signOut/
+  recuperação e atualização de senha, leitura/edição de `profiles`, e o
+  bootstrap automático de organização (ver abaixo). `App.js` agora tem
+  sessão persistente (`supabase.auth.getSession()` + `onAuthStateChange`) e
+  proteção de rota real: usuário anônimo só acessa `/login`, `/cadastro` e
+  `/nova-senha`; usuário autenticado é redirecionado para `/dashboard` se
+  tentar acessar `/login`/`/cadastro`. `pages/auth.js` ganhou fluxo de
+  "Esqueceu a senha?" e uma tela `NovaSenhaPage` para o link de recuperação.
+  `pages/configuracoes.js` agora salva de verdade nome/telefone do usuário
+  (`profiles`) e nome/telefone do negócio (`organizations`), e o botão
+  "Sair da conta" desloga de verdade.
 
-O frontend **ainda não foi conectado** a este banco — os mocks em
-`src/data/mockData.js` e `src/services/api.js` continuam ativos. Isso é
-proposital: conectar autenticação/dados reais é a Fase 3 em diante.
+O restante do frontend (Clientes, Orçamentos, OS, Agenda, Financeiro) ainda
+usa os mocks em `src/data/mockData.js` / `src/services/api.js` — isso é
+proposital, é o escopo da Fase 5/6 em diante.
 
 ## Tabelas criadas (21) + 1 bucket de Storage
 
@@ -55,10 +67,11 @@ proposital: conectar autenticação/dados reais é a Fase 3 em diante.
 
 ## Pendências explícitas de frontend (não implementadas ainda, por não existir tela)
 
-- Não existe tela de criação/seleção de organização. Ao conectar a
-  autenticação real (Fase 3), a primeira sessão de cada usuário vai
-  provisionar automaticamente uma organização pessoal (papel `owner`) como
-  ponte, até existir uma tela de gestão de organizações/convites.
+- Não existe tela de criação/seleção/convite de organização. Como
+  implementado na Fase 3, `getOrEnsureOrganization()` provisiona
+  automaticamente uma organização pessoal (papel `owner`) no primeiro
+  login de cada usuário — ponte deliberada até existir uma tela de gestão
+  de organizações/membros/convites.
 - `Documentos`: schema e bucket prontos, mas a página não tem UI de upload
   — só existe hoje um aviso informativo (Fase 7).
 - `IA`: tabela `ai_requests` pronta para registrar solicitações, mas
@@ -73,6 +86,26 @@ proposital: conectar autenticação/dados reais é a Fase 3 em diante.
   isso for priorizado.
 - Visualização de agenda por dia/semana/mês: o schema (`starts_at`,
   `ends_at`, `all_day`) já suporta, a página `agenda.js` hoje é só uma lista.
+
+## Validação feita na Fase 3
+
+- `node --check` em todos os arquivos `.js` do frontend (sintaxe válida).
+- Confirmado via SQL que o trigger `on_auth_user_created` (cria o profile no
+  signup) está ativo em `auth.users`.
+- **Limitação do ambiente desta sessão**: a política de rede deste sandbox
+  bloqueia (`403`) chamadas HTTPS diretas para `esm.sh` e para o próprio
+  `*.supabase.co`, então não foi possível abrir a aplicação num navegador
+  real e testar o fluxo de cadastro/login/logout ponta a ponta aqui. Isso é
+  uma restrição desta sessão de trabalho, não do projeto — no ambiente do
+  usuário (com internet normal), `esm.sh` e o Supabase carregam
+  normalmente. Recomenda-se um teste manual rápido (`python3 -m http.server
+  8000` na pasta do projeto, depois abrir `app/index.html#/cadastro`) antes
+  de considerar a Fase 3 encerrada de fato.
+- Corrigido, de passagem, um bug pré-existente (não relacionado ao
+  Supabase, já vinha do upload original): `src/styles/app.css` importava
+  `./tokens.css`, um caminho que não existe — o arquivo real é
+  `design-system/tokens.css`. Sem essa correção, a aplicação interna
+  carregava sem nenhum token de design (cores, tipografia, espaçamento).
 
 ## Variáveis de ambiente (Fase 3 em diante)
 
