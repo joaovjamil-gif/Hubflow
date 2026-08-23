@@ -1,0 +1,60 @@
+/* HubFlow — Design Tokens
+   Conceito: o vocabulário visual do técnico de campo — ordem de serviço como
+   "ticket" físico, carimbo de status, prancheta. Fundo escuro de oficina/app
+   noturno, laranja como cor de sinalização (EPI, fita de obra), tipografia
+   técnica com um traço mono para números de OS/orçamento. */
+
+:root {
+  /* Cor */
+  --bg: #0B0B0C;
+  --bg-elevated: #16161A;
+  --bg-elevated-2: #1D1D22;
+  --border: #29292F;
+  --border-soft: #1F1F24;
+
+  --text-primary: #F5F4F2;
+  --text-secondary: #9C9BA3;
+  --text-tertiary: #67666E;
+
+  --accent: #FF5A1F;       /* laranja de sinalização — CTAs, ativo, destaque */
+  --accent-dim: #C7460F;   /* hover/pressed */
+  --accent-soft: #FF5A1F1A; /* fundo translúcido para chips/estados */
+
+  --success: #33C17A;
+  --warning: #E8B339;
+  --danger: #E8503A;
+
+  /* Tipografia */
+  --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+  --text-3xl: clamp(2.75rem, 5vw, 4.5rem);
+
+  /* Espaçamento (escala 4px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* Forma */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Elevação */
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 12px 32px rgba(0,0,0,0.35);
+  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 8px 24px rgba(255,90,31,0.18);
+}
