@@ -4,6 +4,8 @@ import { html, PageHeader, Button, Table, Badge, statusTone, EmptyState, Field, 
 import { orcamentosApi, clientesApi, catalogoApi, aprovarOrcamentoEGerarOS, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
 import { DocumentsPanel } from '../components/documentsPanel.js';
+import { aiService, AI_OPERATIONS } from '../services/aiService.js';
+import { buildQuoteContext } from '../services/aiContext.js';
 
 const ITEM_VAZIO = { servico_id: '', descricao: '', quantidade: 1, unidade: 'un', preco_unitario: 0, desconto: 0 };
 
@@ -68,7 +70,7 @@ function ItemsEditor({ itens, setItens, catalogo }) {
   `;
 }
 
-export function OrcamentosPage() {
+export function OrcamentosPage({ organization }) {
   const [orcamentos, setOrcamentos] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
   const [catalogo, setCatalogo] = React.useState([]);
@@ -78,9 +80,27 @@ export function OrcamentosPage() {
   const [erro, setErro] = React.useState('');
   const [feedback, setFeedback] = React.useState(null);
   const [selecionado, setSelecionado] = React.useState(null);
+  const [iaConsultando, setIaConsultando] = React.useState(false);
+  const [iaMensagem, setIaMensagem] = React.useState('');
 
   const [form, setForm] = React.useState({ cliente_id: '', titulo: '', descricao: '', validade: '', desconto: 0, impostos: 0, observacoes: '', condicoes_pagamento: '' });
   const [itens, setItens] = React.useState([{ ...ITEM_VAZIO }]);
+
+  async function sugerirDescricaoComIA() {
+    setIaMensagem('');
+    setIaConsultando(true);
+    try {
+      const resp = await aiService.request(organization.id, AI_OPERATIONS.QUOTE_DESCRIPTION, {
+        context: buildQuoteContext(form, itens),
+        prompt: form.titulo,
+      });
+      setIaMensagem(resp.status === 'not_configured' ? resp.message : `Gateway respondeu: ${resp.status}`);
+    } catch (err) {
+      setIaMensagem(`Erro ao consultar IA: ${err.message}`);
+    } finally {
+      setIaConsultando(false);
+    }
+  }
 
   function reload() {
     setLoading(true);
@@ -226,7 +246,13 @@ export function OrcamentosPage() {
             />
           <//>
           <${Field} label="Título"><${Input} value=${form.titulo} onChange=${(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ex.: Instalação elétrica" /><//>
-          <${Field} label="Descrição do serviço"><${Textarea} rows="2" value=${form.descricao} onChange=${(e) => setForm({ ...form, descricao: e.target.value })} /><//>
+          <${Field} label="Descrição do serviço">
+            <${Textarea} rows="2" value=${form.descricao} onChange=${(e) => setForm({ ...form, descricao: e.target.value })} />
+            <button type="button" onClick=${sugerirDescricaoComIA} disabled=${iaConsultando || !form.titulo} class="hf-btn hf-btn--ghost" style=${{ padding: '5px 10px', fontSize: '0.76rem', marginTop: 6, alignSelf: 'flex-start' }}>
+              ✦ ${iaConsultando ? 'Consultando IA...' : 'Sugerir com IA'}
+            </button>
+            ${iaMensagem && html`<p style=${{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: 4 }}>${iaMensagem}</p>`}
+          <//>
 
           <${ItemsEditor} itens=${itens} setItens=${setItens} catalogo=${catalogo} />
 
