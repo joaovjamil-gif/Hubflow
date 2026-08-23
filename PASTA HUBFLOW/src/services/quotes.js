@@ -87,6 +87,7 @@ export const quotesApi = {
       p_notes: form.observacoes || null,
       p_payment_terms: form.condicoes_pagamento || null,
       p_items: (items || []).map((it) => ({
+        service_id: it.servico_id || undefined,
         description: it.descricao,
         quantity: Number(it.quantidade) || 1,
         unit: it.unidade || 'un',

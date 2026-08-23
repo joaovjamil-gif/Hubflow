@@ -4,10 +4,12 @@ import { html } from './components/ui.js';
 import { LoginPage, CadastroPage, NovaSenhaPage } from './pages/auth.js';
 import { DashboardPage } from './pages/dashboard.js';
 import { ClientesPage } from './pages/clientes.js';
+import { ServicosPage } from './pages/servicos.js';
 import { OrcamentosPage } from './pages/orcamentos.js';
 import { OrdensServicoPage } from './pages/ordensServico.js';
 import { AgendaPage } from './pages/agenda.js';
 import { FinanceiroPage } from './pages/financeiro.js';
+import { FornecedoresPage } from './pages/fornecedores.js';
 import { DocumentosPage } from './pages/documentos.js';
 import { IAPage } from './pages/ia.js';
 import { ConfiguracoesPage } from './pages/configuracoes.js';
@@ -18,10 +20,12 @@ import { setCurrentOrganizationId } from './services/api.js';
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '▤' },
   { to: '/clientes', label: 'Clientes', icon: '◎' },
+  { to: '/servicos', label: 'Serviços', icon: '◆' },
   { to: '/orcamentos', label: 'Orçamentos', icon: '§' },
   { to: '/ordens-servico', label: 'Ordens de Serviço', icon: '✓' },
   { to: '/agenda', label: 'Agenda', icon: '▦' },
   { to: '/financeiro', label: 'Financeiro', icon: '$' },
+  { to: '/fornecedores', label: 'Fornecedores', icon: '▲' },
   { to: '/documentos', label: 'Documentos', icon: '▣' },
   { to: '/ia', label: 'IA', icon: '✦' },
   { to: '/configuracoes', label: 'Configurações', icon: '⚙' },
@@ -30,10 +34,12 @@ const NAV_ITEMS = [
 const PAGES = {
   '/dashboard': DashboardPage,
   '/clientes': ClientesPage,
+  '/servicos': ServicosPage,
   '/orcamentos': OrcamentosPage,
   '/ordens-servico': OrdensServicoPage,
   '/agenda': AgendaPage,
   '/financeiro': FinanceiroPage,
+  '/fornecedores': FornecedoresPage,
   '/documentos': DocumentosPage,
   '/ia': IAPage,
   '/configuracoes': ConfiguracoesPage,

@@ -18,6 +18,10 @@ import { supabase } from './supabaseClient.js';
 import { quotesApi } from './quotes.js';
 import { workOrdersApi } from './workOrders.js';
 import { financeiroApi as financialApi } from './financial.js';
+import { catalogoApi as catalogService } from './catalog.js';
+import { fornecedoresApi as suppliersService } from './suppliers.js';
+import { contasPagarApi as payablesService } from './payables.js';
+import { agendaApi as calendarService } from './calendar.js';
 
 const delay = (ms = 120) => new Promise((res) => setTimeout(res, ms));
 const uid = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -87,6 +91,9 @@ const CUSTOMER_FIELD_MAP = {
   email: 'email',
   endereco: 'address',
   observacoes: 'notes',
+  status: 'status',
+  documento: 'document',
+  tipo: 'customer_type',
 };
 
 function customerFromDb(row) {
@@ -97,6 +104,9 @@ function customerFromDb(row) {
     email: row.email || '',
     endereco: row.address || '',
     observacoes: row.notes || '',
+    status: row.status,
+    documento: row.document || '',
+    tipo: row.customer_type,
     criado_em: row.created_at ? row.created_at.slice(0, 10) : '',
   };
 }
@@ -112,14 +122,16 @@ function customerToDb(partial) {
 export const clientesApi = {
   // Ordem ascendente por criação (mais antigo → mais novo), igual ao mock
   // original — dashboard.js depende disso para "clientes recentes"
-  // (slice(-3).reverse()).
-  list: async () => {
-    const { data, error } = await supabase
+  // (slice(-3).reverse()). Passar {search, status} não muda a ordem.
+  list: async ({ search = '', status = '' } = {}) => {
+    let query = supabase
       .from('customers')
       .select('*')
       .eq('organization_id', requireOrganizationId())
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true });
+      .is('deleted_at', null);
+    if (status) query = query.eq('status', status);
+    if (search) query = query.or(`name.ilike.%${search}%,document.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);
+    const { data, error } = await query.order('created_at', { ascending: true });
     if (error) throw error;
     return data.map(customerFromDb);
   },
@@ -154,7 +166,92 @@ export const clientesApi = {
   },
 };
 
+// --- Contatos do cliente (customer_contacts) ----------------------------
+function contactFromDb(row) {
+  return {
+    id: row.id,
+    nome: row.name,
+    funcao: row.role || '',
+    email: row.email || '',
+    telefone: row.phone || '',
+    whatsapp: row.whatsapp || '',
+    principal: row.is_primary,
+    observacoes: row.notes || '',
+  };
+}
+
+export const contatosClienteApi = {
+  list: async (customerId) => {
+    const { data, error } = await supabase.from('customer_contacts').select('*').eq('customer_id', customerId).order('is_primary', { ascending: false });
+    if (error) throw error;
+    return data.map(contactFromDb);
+  },
+  create: async (customerId, form) => {
+    const { data, error } = await supabase
+      .from('customer_contacts')
+      .insert({
+        customer_id: customerId,
+        name: form.nome,
+        role: form.funcao || null,
+        email: form.email || null,
+        phone: form.telefone || null,
+        whatsapp: form.whatsapp || null,
+        is_primary: !!form.principal,
+        notes: form.observacoes || null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return contactFromDb(data);
+  },
+  remove: async (id) => {
+    const { error } = await supabase.from('customer_contacts').delete().eq('id', id);
+    if (error) throw error;
+  },
+};
+
+/** Documentos já anexados a uma entidade (leitura — upload ainda pendente, ver docs/BACKEND.md). */
+export async function listDocumentosDaEntidade(entityType, entityId) {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('entity_type', entityType)
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 export const documentosApi = makeCrud(mock.documentos, 'd');
+
+// --- Catálogo de serviços, fornecedores, contas a pagar, agenda ---------
+export const catalogoApi = {
+  list: (opts) => catalogService.list(requireOrganizationId(), opts),
+  create: (form) => catalogService.create(requireOrganizationId(), form),
+  update: (id, patch) => catalogService.update(id, patch),
+  setActive: (id, ativo) => catalogService.setActive(id, ativo),
+};
+
+export const fornecedoresApi = {
+  list: (opts) => suppliersService.list(requireOrganizationId(), opts),
+  get: (id) => suppliersService.get(id),
+  create: (form) => suppliersService.create(requireOrganizationId(), form),
+  update: (id, patch) => suppliersService.update(id, patch),
+};
+
+export const contasPagarApi = {
+  list: () => payablesService.list(requireOrganizationId()),
+  create: (form) => payablesService.create(requireOrganizationId(), form),
+  markAsPaid: (id, paymentMethod) => payablesService.markAsPaid(id, paymentMethod),
+  cancel: (id) => payablesService.cancel(id),
+};
+
+export const agendaCompletaApi = {
+  listRange: (startISO, endISO) => calendarService.listRange(requireOrganizationId(), startISO, endISO),
+  create: (form) => calendarService.create(requireOrganizationId(), form),
+  update: (id, patch) => calendarService.update(id, patch),
+  cancel: (id) => calendarService.cancel(id),
+};
 
 // --- Núcleo operacional (orçamentos, OS, financeiro) — conectado ao Supabase ---
 //
@@ -181,6 +278,13 @@ export const ordensServicoApi = {
   /** form: {cliente_id, titulo, descricao, prioridade, data_prevista, hora_prevista, endereco, valor_estimado, responsavel_id}; items: [{descricao, quantidade, preco_unitario}] */
   create: (form, items) => workOrdersApi.create(requireOrganizationId(), form, items),
   updateStatus: (id, status, extra) => workOrdersApi.updateStatus(id, status, extra),
+  listChecklist: (workOrderId) => workOrdersApi.listChecklist(workOrderId),
+  addChecklistItem: (workOrderId, descricao) => workOrdersApi.addChecklistItem(workOrderId, descricao),
+  toggleChecklistItem: (id, feito) => workOrdersApi.toggleChecklistItem(id, feito),
+  removeChecklistItem: (id) => workOrdersApi.removeChecklistItem(id),
+  listTeam: (workOrderId) => workOrdersApi.listTeam(workOrderId),
+  addTeamMember: (workOrderId, userId, funcao) => workOrdersApi.addTeamMember(workOrderId, userId, funcao),
+  removeTeamMember: (id) => workOrdersApi.removeTeamMember(id),
 };
 
 export const financeiroApi = {
@@ -209,17 +313,41 @@ export async function listAgendaDoDia(data) {
 }
 
 export async function getResumoDashboard() {
-  const [orcs, oss, fin] = await Promise.all([
-    quotesApi.list(requireOrganizationId()),
-    workOrdersApi.list(requireOrganizationId()),
-    financialApi.list(requireOrganizationId()),
+  const orgId = requireOrganizationId();
+  const [clientes, orcs, oss, receber, pagar] = await Promise.all([
+    clientesApi.list(),
+    quotesApi.list(orgId),
+    workOrdersApi.list(orgId),
+    financialApi.list(orgId),
+    payablesService.list(orgId),
   ]);
   const hoje = new Date().toISOString().slice(0, 10);
+  const estaAtrasado = (f) => f.status === 'atrasado' || (f.status === 'pendente' && f.vencimento && f.vencimento < hoje);
+
+  const orcamentosAprovados = orcs.filter((o) => o.status === 'aprovado').length;
+  const osComOrigemEmOrcamento = oss.filter((os) => os.orcamento_id).length;
+
   return {
-    aReceber: fin.filter((f) => f.status !== 'pago').reduce((s, f) => s + f.valor, 0),
+    // já existiam, mantidos para compatibilidade com quem já usa
+    aReceber: receber.filter((f) => f.status !== 'pago').reduce((s, f) => s + f.valor, 0),
     orcamentosPendentes: orcs.filter((o) => ['enviado', 'visualizado'].includes(o.status)).length,
     servicosHoje: oss.filter((os) => os.data === hoje).length,
-    pagamentosAtrasados: fin.filter((f) => f.status === 'atrasado' || (f.status === 'pendente' && f.vencimento && f.vencimento < hoje)).length,
+    pagamentosAtrasados: receber.filter(estaAtrasado).length,
+
+    // indicadores novos, todos calculados a partir do banco
+    clientesAtivos: clientes.filter((c) => c.status === 'active' || !c.status).length,
+    orcamentosAprovados,
+    conversaoOrcamentoParaOS: orcamentosAprovados > 0 ? Math.round((osComOrigemEmOrcamento / orcamentosAprovados) * 100) : 0,
+    osEmAndamento: oss.filter((os) => os.status === 'em_andamento').length,
+    osAtrasadas: oss.filter((os) => os.data && os.data < hoje && !['concluida', 'cancelada'].includes(os.status)).length,
+    receitaPrevista: receber.filter((f) => f.status !== 'pago' && f.status !== 'cancelado').reduce((s, f) => s + f.valor, 0),
+    receitaRecebida: receber.filter((f) => f.status === 'pago').reduce((s, f) => s + f.valor, 0),
+    despesasPendentes: pagar.filter((p) => p.status !== 'pago' && p.status !== 'cancelado').reduce((s, p) => s + p.valor, 0),
+    despesasPagas: pagar.filter((p) => p.status === 'pago').reduce((s, p) => s + p.valor, 0),
+    contasVencidas: receber.filter(estaAtrasado).length + pagar.filter((p) => p.status === 'pendente' && p.vencimento && p.vencimento < hoje).length,
+    fluxoLiquido:
+      receber.filter((f) => f.status === 'pago').reduce((s, f) => s + f.valor, 0) -
+      pagar.filter((p) => p.status === 'pago').reduce((s, p) => s + p.valor, 0),
   };
 }
 
@@ -245,6 +373,16 @@ export const statusLabels = {
     pendente: 'Pendente',
     pago: 'Pago',
     atrasado: 'Atrasado',
+    cancelado: 'Cancelado',
+  },
+  fornecedor: {
+    active: 'Ativo',
+    inactive: 'Inativo',
+  },
+  agenda: {
+    confirmado: 'Confirmado',
+    pendente: 'Pendente',
+    concluido: 'Concluído',
     cancelado: 'Cancelado',
   },
 };

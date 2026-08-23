@@ -23,6 +23,9 @@ export function statusTone(kind, status) {
     orcamento: { aprovado: 'green', enviado: 'yellow', visualizado: 'yellow', aguardando: 'yellow', rascunho: 'grey', recusado: 'red', expirado: 'red', cancelado: 'grey' },
     os: { concluida: 'green', em_andamento: 'orange', agendada: 'yellow', aberta: 'grey', aguardando: 'yellow', cancelada: 'red' },
     financeiro: { pago: 'green', pendente: 'yellow', atrasado: 'red', cancelado: 'grey' },
+    fornecedor: { active: 'green', inactive: 'grey' },
+    cliente: { active: 'green', inactive: 'grey', blocked: 'red' },
+    agenda: { confirmado: 'yellow', pendente: 'grey', concluido: 'green', cancelado: 'red' },
   };
   return (map[kind] && map[kind][status]) || 'grey';
 }

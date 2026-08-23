@@ -86,6 +86,7 @@ export const workOrdersApi = {
       .from('work_order_items')
       .insert({
         work_order_id: workOrderId,
+        service_id: item.servico_id || null,
         description: item.descricao,
         quantity: Number(item.quantidade) || 1,
         unit_price: Number(item.preco_unitario) || 0,
@@ -143,5 +144,61 @@ export const workOrdersApi = {
       ordemServico: workOrderFromDb(data.work_order),
       lancamento: data.account_receivable,
     };
+  },
+
+  // --- Checklist (tarefas da execução, separado dos itens cobráveis) ---
+  listChecklist: async (workOrderId) => {
+    const { data, error } = await supabase
+      .from('work_order_checklist_items')
+      .select('*')
+      .eq('work_order_id', workOrderId)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data.map((row) => ({ id: row.id, descricao: row.description, feito: row.is_done, feito_em: row.done_at }));
+  },
+  addChecklistItem: async (workOrderId, descricao) => {
+    const { data, error } = await supabase
+      .from('work_order_checklist_items')
+      .insert({ work_order_id: workOrderId, description: descricao })
+      .select()
+      .single();
+    if (error) throw error;
+    return { id: data.id, descricao: data.description, feito: data.is_done, feito_em: data.done_at };
+  },
+  toggleChecklistItem: async (id, feito) => {
+    const userId = (await supabase.auth.getUser()).data?.user?.id ?? null;
+    const patch = feito
+      ? { is_done: true, done_at: new Date().toISOString(), done_by: userId }
+      : { is_done: false, done_at: null, done_by: null };
+    const { error } = await supabase.from('work_order_checklist_items').update(patch).eq('id', id);
+    if (error) throw error;
+  },
+  removeChecklistItem: async (id) => {
+    const { error } = await supabase.from('work_order_checklist_items').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // --- Equipe (mais de um responsável na execução) ---
+  listTeam: async (workOrderId) => {
+    const { data, error } = await supabase
+      .from('work_order_team')
+      .select('id, user_id, role, profiles(full_name, email)')
+      .eq('work_order_id', workOrderId);
+    if (error) throw error;
+    return data.map((row) => ({
+      id: row.id,
+      usuario_id: row.user_id,
+      nome: row.profiles?.full_name || row.profiles?.email || 'Sem nome',
+      funcao: row.role || '',
+    }));
+  },
+  addTeamMember: async (workOrderId, userId, funcao) => {
+    const { error } = await supabase.from('work_order_team').insert({ work_order_id: workOrderId, user_id: userId, role: funcao || null });
+    if (error) throw error;
+  },
+  removeTeamMember: async (id) => {
+    const { error } = await supabase.from('work_order_team').delete().eq('id', id);
+    if (error) throw error;
   },
 };

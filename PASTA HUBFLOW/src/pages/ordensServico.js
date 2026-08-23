@@ -1,7 +1,7 @@
 // src/pages/ordensServico.js
 import React from 'https://esm.sh/react@18';
 import { html, PageHeader, Table, Badge, statusTone, EmptyState, Card, Button, Modal, Field, Input, Select, Textarea } from '../components/ui.js';
-import { ordensServicoApi, clientesApi, concluirOSEGerarLancamento, statusLabels } from '../services/api.js';
+import { ordensServicoApi, clientesApi, catalogoApi, concluirOSEGerarLancamento, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
 import { listOrganizationMembers } from '../services/team.js';
 
@@ -30,12 +30,20 @@ const PROXIMOS_STATUS = {
 };
 const STATUS_ATIVOS = ['aberta', 'agendada', 'em_andamento', 'aguardando'];
 
-const ITEM_VAZIO = { descricao: '', quantidade: 1, preco_unitario: 0 };
+const ITEM_VAZIO = { servico_id: '', descricao: '', quantidade: 1, preco_unitario: 0 };
 
-function ItemsEditor({ itens, setItens }) {
+function ItemsEditor({ itens, setItens, catalogo = [] }) {
   function atualizar(i, campo, valor) {
     const novo = [...itens];
     novo[i] = { ...novo[i], [campo]: valor };
+    setItens(novo);
+  }
+  function escolherServico(i, servicoId) {
+    const servico = catalogo.find((s) => s.id === servicoId);
+    const novo = [...itens];
+    novo[i] = servico
+      ? { ...novo[i], servico_id: servico.id, descricao: servico.nome, preco_unitario: servico.preco_padrao }
+      : { ...novo[i], servico_id: '' };
     setItens(novo);
   }
   return html`
@@ -46,11 +54,21 @@ function ItemsEditor({ itens, setItens }) {
       </div>
       ${itens.map(
         (it, i) => html`
-          <div style=${{ display: 'grid', gridTemplateColumns: '2fr 0.6fr 1fr auto', gap: 8, marginBottom: 8 }}>
-            <${Input} placeholder="Descrição" required value=${it.descricao} onChange=${(e) => atualizar(i, 'descricao', e.target.value)} />
-            <${Input} type="number" min="0" step="1" placeholder="Qtd" value=${it.quantidade} onChange=${(e) => atualizar(i, 'quantidade', e.target.value)} />
-            <${Input} type="number" min="0" step="0.01" placeholder="Preço unit." value=${it.preco_unitario} onChange=${(e) => atualizar(i, 'preco_unitario', e.target.value)} />
-            <button type="button" onClick=${() => setItens(itens.filter((_, idx) => idx !== i))} class="hf-btn hf-btn--ghost">✕</button>
+          <div style=${{ border: '1px solid var(--border-soft)', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+            ${catalogo.length > 0 && html`
+              <${Select}
+                value=${it.servico_id}
+                onChange=${(e) => escolherServico(i, e.target.value)}
+                options=${[{ value: '', label: 'Descrição livre (sem vincular ao catálogo)' }, ...catalogo.map((s) => ({ value: s.id, label: `${s.nome} — R$ ${s.preco_padrao.toFixed(2)}` }))]}
+                style=${{ marginBottom: 8 }}
+              />
+            `}
+            <div style=${{ display: 'grid', gridTemplateColumns: '2fr 0.6fr 1fr auto', gap: 8 }}>
+              <${Input} placeholder="Descrição" required value=${it.descricao} onChange=${(e) => atualizar(i, 'descricao', e.target.value)} />
+              <${Input} type="number" min="0" step="1" placeholder="Qtd" value=${it.quantidade} onChange=${(e) => atualizar(i, 'quantidade', e.target.value)} />
+              <${Input} type="number" min="0" step="0.01" placeholder="Preço unit." value=${it.preco_unitario} onChange=${(e) => atualizar(i, 'preco_unitario', e.target.value)} />
+              <button type="button" onClick=${() => setItens(itens.filter((_, idx) => idx !== i))} class="hf-btn hf-btn--ghost">✕</button>
+            </div>
           </div>
         `
       )}
@@ -61,6 +79,7 @@ function ItemsEditor({ itens, setItens }) {
 export function OrdensServicoPage({ organization }) {
   const [os, setOs] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
+  const [catalogo, setCatalogo] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selecionada, setSelecionada] = React.useState(null);
   const [feedback, setFeedback] = React.useState(null);
@@ -77,8 +96,8 @@ export function OrdensServicoPage({ organization }) {
 
   function reload() {
     setLoading(true);
-    Promise.all([ordensServicoApi.list(), clientesApi.list()])
-      .then(([o, c]) => { setOs(o); setClientes(c); })
+    Promise.all([ordensServicoApi.list(), clientesApi.list(), catalogoApi.list({ onlyActive: true })])
+      .then(([o, c, cat]) => { setOs(o); setClientes(c); setCatalogo(cat); })
       .catch((err) => setErro(err.message))
       .finally(() => setLoading(false));
   }
@@ -128,6 +147,7 @@ export function OrdensServicoPage({ organization }) {
             os=${selecionada}
             nomeCliente=${nomeCliente(selecionada.cliente_id)}
             membros=${membros}
+            catalogo=${catalogo}
             onVoltar=${() => { setSelecionada(null); reload(); }}
             onAvisar=${avisar}
           />`
@@ -172,7 +192,7 @@ export function OrdensServicoPage({ organization }) {
           </div>
           <${Field} label="Endereço de execução"><${Input} value=${form.endereco} onChange=${(e) => setForm({ ...form, endereco: e.target.value })} /><//>
           <${Field} label="Valor estimado (R$)"><${Input} type="number" min="0" step="0.01" value=${form.valor_estimado} onChange=${(e) => setForm({ ...form, valor_estimado: e.target.value })} /><//>
-          <${ItemsEditor} itens=${itens} setItens=${setItens} />
+          <${ItemsEditor} itens=${itens} setItens=${setItens} catalogo=${catalogo} />
           ${erro && html`<p style=${{ color: 'var(--danger)', fontSize: '0.82rem', margin: 0 }}>${erro}</p>`}
           <${Button} type="submit" variant="primary" disabled=${salvando}>${salvando ? 'Criando...' : 'Criar OS'}<//>
         </form>
@@ -181,11 +201,15 @@ export function OrdensServicoPage({ organization }) {
   `;
 }
 
-function OsDetalhe({ os, nomeCliente, membros, onVoltar, onAvisar }) {
+function OsDetalhe({ os, nomeCliente, membros, catalogo = [], onVoltar, onAvisar }) {
   const [atual, setAtual] = React.useState(os);
   const [itens, setItens] = React.useState([]);
   const [historico, setHistorico] = React.useState([]);
-  const [novoItem, setNovoItem] = React.useState({ descricao: '', quantidade: 1, preco_unitario: 0 });
+  const [checklist, setChecklist] = React.useState([]);
+  const [equipe, setEquipe] = React.useState([]);
+  const [novoChecklist, setNovoChecklist] = React.useState('');
+  const [novoMembroEquipe, setNovoMembroEquipe] = React.useState('');
+  const [novoItem, setNovoItem] = React.useState({ servico_id: '', descricao: '', quantidade: 1, preco_unitario: 0 });
   const [concluirOpen, setConcluirOpen] = React.useState(false);
   const [concluirForm, setConcluirForm] = React.useState({ valorFinal: os.valor_estimado, vencimento: '', formaPagamento: '' });
   const [processando, setProcessando] = React.useState(false);
@@ -202,13 +226,65 @@ function OsDetalhe({ os, nomeCliente, membros, onVoltar, onAvisar }) {
       ordensServicoApi.get(atual.id),
       ordensServicoApi.listItems(atual.id),
       listActivity('work_orders', atual.id),
-    ]).then(([wo, its, hist]) => {
+      ordensServicoApi.listChecklist(atual.id),
+      ordensServicoApi.listTeam(atual.id),
+    ]).then(([wo, its, hist, check, time]) => {
       if (wo) setAtual(wo);
       setItens(its);
       setHistorico(hist);
+      setChecklist(check);
+      setEquipe(time);
     });
   }
   React.useEffect(carregar, [atual.id]);
+
+  async function adicionarChecklist(e) {
+    e.preventDefault();
+    if (!novoChecklist.trim()) return;
+    try {
+      await ordensServicoApi.addChecklistItem(atual.id, novoChecklist.trim());
+      setNovoChecklist('');
+      carregar();
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
+  async function alternarChecklist(item) {
+    try {
+      await ordensServicoApi.toggleChecklistItem(item.id, !item.feito);
+      carregar();
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
+  async function removerChecklist(id) {
+    try {
+      await ordensServicoApi.removeChecklistItem(id);
+      carregar();
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
+
+  async function adicionarNaEquipe(e) {
+    e.preventDefault();
+    if (!novoMembroEquipe) return;
+    try {
+      await ordensServicoApi.addTeamMember(atual.id, novoMembroEquipe);
+      setNovoMembroEquipe('');
+      carregar();
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
+  async function removerDaEquipe(id) {
+    try {
+      await ordensServicoApi.removeTeamMember(id);
+      carregar();
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
 
   async function mudarStatus(novoStatus, extra) {
     setErro('');
@@ -250,11 +326,15 @@ function OsDetalhe({ os, nomeCliente, membros, onVoltar, onAvisar }) {
     if (!novoItem.descricao) return;
     try {
       await ordensServicoApi.addItem(atual.id, novoItem);
-      setNovoItem({ descricao: '', quantidade: 1, preco_unitario: 0 });
+      setNovoItem({ servico_id: '', descricao: '', quantidade: 1, preco_unitario: 0 });
       carregar();
     } catch (err) {
       setErro(err.message);
     }
+  }
+  function escolherServicoNovoItem(servicoId) {
+    const servico = catalogo.find((s) => s.id === servicoId);
+    setNovoItem(servico ? { servico_id: servico.id, descricao: servico.nome, quantidade: 1, preco_unitario: servico.preco_padrao } : { ...novoItem, servico_id: '' });
   }
 
   async function concluir(e) {
@@ -314,11 +394,61 @@ function OsDetalhe({ os, nomeCliente, membros, onVoltar, onAvisar }) {
               emptyLabel="Nenhum item ainda."
             />
             ${ativa && html`
-              <form onSubmit=${adicionarItem} style=${{ display: 'grid', gridTemplateColumns: '2fr 0.6fr 1fr auto', gap: 8, marginTop: 14 }}>
-                <${Input} placeholder="Descrição do item/material" value=${novoItem.descricao} onChange=${(e) => setNovoItem({ ...novoItem, descricao: e.target.value })} />
-                <${Input} type="number" min="0" step="1" value=${novoItem.quantidade} onChange=${(e) => setNovoItem({ ...novoItem, quantidade: e.target.value })} />
-                <${Input} type="number" min="0" step="0.01" value=${novoItem.preco_unitario} onChange=${(e) => setNovoItem({ ...novoItem, preco_unitario: e.target.value })} />
-                <${Button} type="submit" variant="ghost">+ Adicionar<//>
+              <form onSubmit=${adicionarItem} style=${{ marginTop: 14 }}>
+                ${catalogo.length > 0 && html`
+                  <${Select}
+                    value=${novoItem.servico_id}
+                    onChange=${(e) => escolherServicoNovoItem(e.target.value)}
+                    options=${[{ value: '', label: 'Descrição livre (sem vincular ao catálogo)' }, ...catalogo.map((s) => ({ value: s.id, label: `${s.nome} — R$ ${s.preco_padrao.toFixed(2)}` }))]}
+                    style=${{ marginBottom: 8 }}
+                  />
+                `}
+                <div style=${{ display: 'grid', gridTemplateColumns: '2fr 0.6fr 1fr auto', gap: 8 }}>
+                  <${Input} placeholder="Descrição do item/material" value=${novoItem.descricao} onChange=${(e) => setNovoItem({ ...novoItem, descricao: e.target.value })} />
+                  <${Input} type="number" min="0" step="1" value=${novoItem.quantidade} onChange=${(e) => setNovoItem({ ...novoItem, quantidade: e.target.value })} />
+                  <${Input} type="number" min="0" step="0.01" value=${novoItem.preco_unitario} onChange=${(e) => setNovoItem({ ...novoItem, preco_unitario: e.target.value })} />
+                  <${Button} type="submit" variant="ghost">+ Adicionar<//>
+                </div>
+              </form>
+            `}
+          <//>
+
+          <${Card}>
+            <h3 style=${{ marginBottom: 12 }}>Checklist de execução</h3>
+            ${checklist.length === 0
+              ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Nenhuma tarefa ainda.</p>`
+              : html`<div style=${{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  ${checklist.map((it) => html`
+                    <label key=${it.id} style=${{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.88rem', padding: '4px 0' }}>
+                      <input type="checkbox" checked=${it.feito} disabled=${!ativa} onChange=${() => alternarChecklist(it)} />
+                      <span style=${{ flex: 1, textDecoration: it.feito ? 'line-through' : 'none', color: it.feito ? 'var(--text-tertiary)' : 'var(--text-primary)' }}>${it.descricao}</span>
+                      ${ativa && html`<button type="button" onClick=${() => removerChecklist(it.id)} class="hf-btn hf-btn--ghost" style=${{ padding: '2px 8px', fontSize: '0.75rem' }}>✕</button>`}
+                    </label>
+                  `)}
+                </div>`}
+            ${ativa && html`
+              <form onSubmit=${adicionarChecklist} style=${{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <${Input} placeholder="Nova tarefa (ex.: Testar disjuntor)" value=${novoChecklist} onChange=${(e) => setNovoChecklist(e.target.value)} />
+                <${Button} type="submit" variant="ghost">+<//>
+              </form>
+            `}
+          <//>
+
+          <${Card}>
+            <h3 style=${{ marginBottom: 12 }}>Equipe</h3>
+            ${equipe.length === 0
+              ? html`<p style=${{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>Só o responsável principal está definido.</p>`
+              : equipe.map((m) => html`
+                  <div key=${m.id} style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}>
+                    <span>${m.nome}${m.funcao ? ` — ${m.funcao}` : ''}</span>
+                    ${ativa && html`<button onClick=${() => removerDaEquipe(m.id)} class="hf-btn hf-btn--ghost" style=${{ padding: '4px 8px', fontSize: '0.75rem' }}>Remover</button>`}
+                  </div>
+                `)}
+            ${ativa && html`
+              <form onSubmit=${adicionarNaEquipe} style=${{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <${Select} value=${novoMembroEquipe} onChange=${(e) => setNovoMembroEquipe(e.target.value)}
+                  options=${[{ value: '', label: 'Selecione um membro...' }, ...membros.map((m) => ({ value: m.id, label: m.nome }))]} />
+                <${Button} type="submit" variant="ghost">+<//>
               </form>
             `}
           <//>

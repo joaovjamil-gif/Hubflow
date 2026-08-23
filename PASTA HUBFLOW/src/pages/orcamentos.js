@@ -1,19 +1,27 @@
 // src/pages/orcamentos.js
 import React from 'https://esm.sh/react@18';
 import { html, PageHeader, Button, Table, Badge, statusTone, EmptyState, Field, Input, Textarea, Select, Modal, Card } from '../components/ui.js';
-import { orcamentosApi, clientesApi, aprovarOrcamentoEGerarOS, statusLabels } from '../services/api.js';
+import { orcamentosApi, clientesApi, catalogoApi, aprovarOrcamentoEGerarOS, statusLabels } from '../services/api.js';
 import { listActivity } from '../services/activity.js';
 
-const ITEM_VAZIO = { descricao: '', quantidade: 1, unidade: 'un', preco_unitario: 0, desconto: 0 };
+const ITEM_VAZIO = { servico_id: '', descricao: '', quantidade: 1, unidade: 'un', preco_unitario: 0, desconto: 0 };
 
 function calcularSubtotalItens(itens) {
   return itens.reduce((s, it) => s + (Number(it.quantidade) || 0) * (Number(it.preco_unitario) || 0) - (Number(it.desconto) || 0), 0);
 }
 
-function ItemsEditor({ itens, setItens }) {
+function ItemsEditor({ itens, setItens, catalogo }) {
   function atualizar(i, campo, valor) {
     const novo = [...itens];
     novo[i] = { ...novo[i], [campo]: valor };
+    setItens(novo);
+  }
+  function escolherServico(i, servicoId) {
+    const servico = catalogo.find((s) => s.id === servicoId);
+    const novo = [...itens];
+    novo[i] = servico
+      ? { ...novo[i], servico_id: servico.id, descricao: servico.nome, unidade: servico.unidade, preco_unitario: servico.preco_padrao }
+      : { ...novo[i], servico_id: '' };
     setItens(novo);
   }
   function remover(i) {
@@ -32,12 +40,22 @@ function ItemsEditor({ itens, setItens }) {
         : html`<div style=${{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             ${itens.map(
               (it, i) => html`
-                <div style=${{ display: 'grid', gridTemplateColumns: '2fr 0.7fr 1fr 0.7fr auto', gap: 8, alignItems: 'end' }}>
-                  <${Field} label="Descrição"><${Input} required value=${it.descricao} onChange=${(e) => atualizar(i, 'descricao', e.target.value)} /><//>
-                  <${Field} label="Qtd"><${Input} type="number" min="0" step="1" value=${it.quantidade} onChange=${(e) => atualizar(i, 'quantidade', e.target.value)} /><//>
-                  <${Field} label="Preço unit. (R$)"><${Input} type="number" min="0" step="0.01" value=${it.preco_unitario} onChange=${(e) => atualizar(i, 'preco_unitario', e.target.value)} /><//>
-                  <${Field} label="Desc. (R$)"><${Input} type="number" min="0" step="0.01" value=${it.desconto} onChange=${(e) => atualizar(i, 'desconto', e.target.value)} /><//>
-                  <button type="button" onClick=${() => remover(i)} class="hf-btn hf-btn--ghost" style=${{ padding: '9px 10px' }}>✕</button>
+                <div style=${{ border: '1px solid var(--border-soft)', borderRadius: 8, padding: 10 }}>
+                  ${catalogo.length > 0 && html`
+                    <${Select}
+                      value=${it.servico_id}
+                      onChange=${(e) => escolherServico(i, e.target.value)}
+                      options=${[{ value: '', label: 'Descrição livre (sem vincular ao catálogo)' }, ...catalogo.map((s) => ({ value: s.id, label: `${s.nome} — R$ ${s.preco_padrao.toFixed(2)}` }))]}
+                      style=${{ marginBottom: 8 }}
+                    />
+                  `}
+                  <div style=${{ display: 'grid', gridTemplateColumns: '2fr 0.7fr 1fr 0.7fr auto', gap: 8, alignItems: 'end' }}>
+                    <${Field} label="Descrição"><${Input} required value=${it.descricao} onChange=${(e) => atualizar(i, 'descricao', e.target.value)} /><//>
+                    <${Field} label="Qtd"><${Input} type="number" min="0" step="1" value=${it.quantidade} onChange=${(e) => atualizar(i, 'quantidade', e.target.value)} /><//>
+                    <${Field} label="Preço unit. (R$)"><${Input} type="number" min="0" step="0.01" value=${it.preco_unitario} onChange=${(e) => atualizar(i, 'preco_unitario', e.target.value)} /><//>
+                    <${Field} label="Desc. (R$)"><${Input} type="number" min="0" step="0.01" value=${it.desconto} onChange=${(e) => atualizar(i, 'desconto', e.target.value)} /><//>
+                    <button type="button" onClick=${() => remover(i)} class="hf-btn hf-btn--ghost" style=${{ padding: '9px 10px' }}>✕</button>
+                  </div>
                 </div>
               `
             )}
@@ -52,6 +70,7 @@ function ItemsEditor({ itens, setItens }) {
 export function OrcamentosPage() {
   const [orcamentos, setOrcamentos] = React.useState([]);
   const [clientes, setClientes] = React.useState([]);
+  const [catalogo, setCatalogo] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -64,8 +83,8 @@ export function OrcamentosPage() {
 
   function reload() {
     setLoading(true);
-    Promise.all([orcamentosApi.list(), clientesApi.list()])
-      .then(([o, c]) => { setOrcamentos(o); setClientes(c); })
+    Promise.all([orcamentosApi.list(), clientesApi.list(), catalogoApi.list({ onlyActive: true })])
+      .then(([o, c, cat]) => { setOrcamentos(o); setClientes(c); setCatalogo(cat); })
       .catch((err) => setErro(err.message))
       .finally(() => setLoading(false));
   }
@@ -208,7 +227,7 @@ export function OrcamentosPage() {
           <${Field} label="Título"><${Input} value=${form.titulo} onChange=${(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ex.: Instalação elétrica" /><//>
           <${Field} label="Descrição do serviço"><${Textarea} rows="2" value=${form.descricao} onChange=${(e) => setForm({ ...form, descricao: e.target.value })} /><//>
 
-          <${ItemsEditor} itens=${itens} setItens=${setItens} />
+          <${ItemsEditor} itens=${itens} setItens=${setItens} catalogo=${catalogo} />
 
           <div style=${{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <${Field} label="Desconto total (R$)"><${Input} type="number" min="0" step="0.01" value=${form.desconto} onChange=${(e) => setForm({ ...form, desconto: e.target.value })} /><//>

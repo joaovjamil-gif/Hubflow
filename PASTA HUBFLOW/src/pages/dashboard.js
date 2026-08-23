@@ -35,6 +35,14 @@ export function DashboardPage({ navigate }) {
         <${StatCard} label="Orçamentos pendentes" value=${resumo ? resumo.orcamentosPendentes : '—'} />
         <${StatCard} label="Serviços hoje" value=${resumo ? resumo.servicosHoje : '—'} />
         <${StatCard} label="Pagamentos atrasados" value=${resumo ? resumo.pagamentosAtrasados : '—'} />
+        <${StatCard} label="Clientes ativos" value=${resumo ? resumo.clientesAtivos : '—'} />
+        <${StatCard} label="Orçamentos aprovados" value=${resumo ? resumo.orcamentosAprovados : '—'} />
+        <${StatCard} label="Conversão em OS" value=${resumo ? `${resumo.conversaoOrcamentoParaOS}%` : '—'} />
+        <${StatCard} label="OS em andamento" value=${resumo ? resumo.osEmAndamento : '—'} />
+        <${StatCard} label="OS atrasadas" value=${resumo ? resumo.osAtrasadas : '—'} />
+        <${StatCard} label="Receita recebida" value=${resumo ? `R$ ${resumo.receitaRecebida.toLocaleString('pt-BR')}` : '—'} />
+        <${StatCard} label="Despesas pendentes" value=${resumo ? `R$ ${resumo.despesasPendentes.toLocaleString('pt-BR')}` : '—'} />
+        <${StatCard} label="Contas vencidas" value=${resumo ? resumo.contasVencidas : '—'} />
       </div>
 
       <div style=${{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 32 }}>

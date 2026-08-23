@@ -137,6 +137,9 @@ dá para fazer fora deste sandbox.
   entre os dois formatos será feita dentro de `src/services/api.js`, para
   não exigir alterar nenhuma página.
 
+- **Bloco 2 concluído** (núcleo operacional completo): ver seção própria
+  logo abaixo.
+
 ## Pendências explícitas de frontend (não implementadas ainda, por não existir tela)
 
 - Não existe tela de criação/seleção/convite de organização. Como
@@ -145,24 +148,118 @@ dá para fazer fora deste sandbox.
   login de cada usuário — ponte deliberada até existir uma tela de gestão
   de organizações/membros/convites.
 - `Documentos`: schema e bucket prontos, mas a página não tem UI de upload
-  — só existe hoje um aviso informativo (Fase 7).
+  — só existe hoje um aviso informativo (Fase 7). Clientes já mostram uma
+  lista de leitura (`listDocumentosDaEntidade`), vazia até o upload existir.
 - `IA`: tabela `ai_requests` pronta para registrar solicitações, mas
   nenhuma chamada externa de IA foi implementada (Fase 9, e apenas
   mediante decisão explícita de qual modelo/API usar).
-- Edição de campos livres em orçamento/OS já aprovados (ex.: mudar a
-  descrição de um orçamento depois de criado, editar um item já salvo em
-  vez de só adicionar/remover) e exclusão (hard/soft delete) de clientes,
-  orçamentos e OS pela UI: as APIs já suportam o necessário para o fluxo
-  principal (criar, mudar status, adicionar item), mas não há botão de
-  "editar" genérico nem de "excluir" em nenhuma dessas três telas ainda.
-- Catálogo de serviços (`services`): continua sem UI — o seletor de item em
-  Orçamento/OS é texto livre, não busca de um catálogo pré-cadastrado.
-- Fornecedores (`suppliers`) e contas a pagar (`accounts_payable`): schema
-  pronto (Fase 2), nenhuma tela ainda.
-- Visualização de agenda por dia/semana/mês: o schema de `calendar_events`
-  (`starts_at`, `ends_at`, `all_day`) já suporta, mas a página `agenda.js`
-  ainda deriva a lista diretamente das OS agendadas, sem usar
-  `calendar_events` nem oferecer essas visualizações (Fase 8).
+- Edição de campos livres em orçamento já aprovado/OS já concluída, e
+  exclusão (hard delete) de clientes/orçamentos/OS pela UI: as APIs
+  suportam o necessário para o fluxo principal, mas não há botão de
+  "excluir" permanente em nenhuma dessas telas — soft delete de clientes
+  já existe na API (`clientesApi.remove`), só não está exposto na UI.
+- Assinatura/aceite do cliente na OS: colunas preparadas
+  (`work_orders.signature_url/accepted_by_name/accepted_at`), nenhuma UI —
+  conforme pedido explicitamente para não implementar ainda.
+- Execução da OS pelo celular: a estrutura (checklist, equipe, itens,
+  anexos via `documents`) já é suficiente para isso; nenhum app/PWA mobile
+  foi criado, é um bloco futuro.
+- Relatórios financeiros dedicados: `transactions` já centraliza receitas e
+  despesas pagas para isso, mas não há tela de relatório/exportação ainda,
+  só os totais na aba "Fluxo de caixa" do Financeiro.
+- `financial_categories`/`cost_centers`: tabelas prontas (Fase 2),
+  `accounts_payable.category`/`transactions.category_id` ainda não usam
+  uma categoria cadastrada (é texto livre na UI de contas a pagar).
+- Agenda: dia/semana/mês e eventos manuais já implementados no Bloco 2 (ver
+  seção própria) — o que falta é só drag-and-drop/edição de horário por
+  arraste, não essencial para o uso real.
+
+## Bloco 2 — núcleo operacional completo
+
+Migrations 0017-0021, aplicadas nesta ordem:
+
+- `0017_search_indexes.sql` — `pg_trgm` + índices GIN para busca por
+  substring em nome/documento/número (clientes, orçamentos, OS,
+  fornecedores, catálogo).
+- `0018_work_order_team_checklist_signature_prep.sql` — `work_order_team`
+  (mais de um responsável por OS), `work_order_checklist_items` (tarefas
+  da execução, separadas dos itens cobráveis), e colunas de preparo para
+  aceite/assinatura do cliente (`work_orders.signature_url`/
+  `accepted_by_name`/`accepted_at` — sem UI, conforme pedido).
+- `0019_financial_ledger_calendar_sync_activity.sql` — trigger que gera um
+  lançamento em `transactions` sempre que uma conta a receber/pagar é
+  marcada como paga (ledger único para "fluxo de caixa"); trigger que
+  sincroniza automaticamente um `calendar_event` sempre que uma OS recebe
+  ou perde data/horário (agendar → evento confirmado; desagendar → evento
+  cancelado, não apagado; concluir → evento concluído); histórico
+  automático estendido para `suppliers` e `accounts_payable`.
+- `0020_move_pg_trgm_to_extensions_schema.sql` — correção de aviso do
+  Security Advisor (extensão fora do schema `public`).
+- `0021_service_reference_integrity.sql` — correção de uma lacuna real
+  encontrada em teste: `quote_items.service_id`/`work_order_items.service_id`
+  não tinham `ON DELETE SET NULL`, o que bloquearia excluir um serviço do
+  catálogo referenciado por um item histórico. Não afeta o app hoje (não
+  existe exclusão de serviço na UI, só desativação), mas é a integridade
+  correta para quando existir.
+
+Frontend novo/conectado nesta etapa:
+
+- `src/services/catalog.js`, `suppliers.js`, `payables.js`, `calendar.js` —
+  novas camadas de acesso a dados, seguindo o mesmo padrão de mapeamento
+  português↔inglês das anteriores.
+- `src/services/workOrders.js` — ganhou `listChecklist`/`addChecklistItem`/
+  `toggleChecklistItem`/`removeChecklistItem` e `listTeam`/`addTeamMember`/
+  `removeTeamMember`; `addItem` e a criação de OS/orçamento agora aceitam
+  `servico_id` para vincular ao catálogo.
+- `src/services/api.js` — `clientesApi.list` agora aceita `{search, status}`;
+  novo `contatosClienteApi`, `listDocumentosDaEntidade`, `catalogoApi`,
+  `fornecedoresApi`, `contasPagarApi`, `agendaCompletaApi`;
+  `getResumoDashboard` ganhou 8 indicadores novos, todos calculados a
+  partir do banco (nenhum número fixo).
+- `pages/clientes.js` — busca, filtro por status, editar, e detalhe
+  expandido: contatos (CRUD), documentos relacionados (leitura), orçamentos/
+  OS/financeiro relacionados, histórico.
+- `pages/servicos.js` (nova) — catálogo completo: criar, editar, ativar/
+  desativar, categoria, preço, custo, margem, unidade.
+- `pages/fornecedores.js` (nova) — cadastro, busca, detalhe com contas a
+  pagar vinculadas e histórico.
+- `pages/financeiro.js` — reescrita com abas "A receber" (já existia),
+  "A pagar" (nova) e "Fluxo de caixa" (novo: saldo realizado/previsto,
+  receitas/despesas, vencidos — tudo somado a partir de `accounts_receivable`
+  + `accounts_payable` reais).
+- `pages/agenda.js` — reescrita: visões dia/semana/mês, criação/cancelamento
+  de evento manual, eventos de OS aparecem automaticamente (sincronizados
+  pelo banco) e são somente cancelados pela própria OS.
+- `pages/ordensServico.js` — ganhou seletor de serviço do catálogo nos
+  itens (no modal de criação e no formulário rápido do detalhe), card de
+  checklist (adicionar/marcar/remover tarefa) e card de equipe
+  (adicionar/remover membros).
+- `pages/orcamentos.js` — mesmo seletor de serviço do catálogo nos itens.
+- `pages/dashboard.js` — 8 indicadores novos: clientes ativos, orçamentos
+  aprovados, conversão orçamento→OS, OS em andamento, OS atrasadas, receita
+  recebida, despesas pendentes, contas vencidas.
+- `App.js` — navegação ganhou "Serviços" e "Fornecedores".
+
+Corrigido de passagem: um bug real no `ClientesPage` durante a escrita
+desta etapa — o modal de edição não aparecia quando acionado a partir da
+tela de detalhe do cliente, porque o `return` antecipado da tela de
+detalhe pulava o JSX do modal. Corrigido antes de qualquer commit (nunca
+chegou a ir para o repositório quebrado).
+
+### Validação desta etapa
+
+Fluxo completo revalidado via SQL com uma identidade autenticada real
+(mesma técnica das fases anteriores — usuário de teste + `organization_members`
++ `request.jwt.claims`), cobrindo: orçamento→OS ainda funciona após as
+migrations novas; agendar/desagendar/concluir uma OS sincroniza o evento
+de agenda automaticamente nos 3 estados; marcar conta a receber/pagar como
+paga gera a transaction correspondente automaticamente; checklist e equipe
+funcionam com RLS; histórico cobre fornecedores e contas a pagar; contato
+de cliente e serviço do catálogo funcionam; a correção de FK do serviço
+não quebra nada. Todos os dados de teste foram removidos ao final —
+0 linhas em todas as tabelas ao terminar. `node --check` limpo em 100% dos
+`.js` do frontend. Mesma limitação já registrada nas fases anteriores:
+teste em navegador real não foi possível nesta sessão (rede do sandbox).
 
 ## Validação feita na Fase 3
 
