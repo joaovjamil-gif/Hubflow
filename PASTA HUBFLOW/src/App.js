@@ -13,6 +13,7 @@ import { IAPage } from './pages/ia.js';
 import { ConfiguracoesPage } from './pages/configuracoes.js';
 import { supabase } from './services/supabaseClient.js';
 import { getMyProfile, getOrEnsureOrganization, signOut } from './services/auth.js';
+import { setCurrentOrganizationId } from './services/api.js';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '▤' },
@@ -87,6 +88,7 @@ function useAuth() {
   const carregarPerfilEOrganizacao = React.useCallback(async (session) => {
     try {
       const [profile, organization] = await Promise.all([getMyProfile(), getOrEnsureOrganization()]);
+      setCurrentOrganizationId(organization?.id);
       setState({ status: 'authenticated', session, profile, organization });
     } catch (err) {
       console.error('Falha ao carregar perfil/organização:', err);
@@ -100,7 +102,10 @@ function useAuth() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!ativo) return;
       if (session) carregarPerfilEOrganizacao(session);
-      else setState({ status: 'anonymous', session: null, profile: null, organization: null });
+      else {
+        setCurrentOrganizationId(null);
+        setState({ status: 'anonymous', session: null, profile: null, organization: null });
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -110,7 +115,10 @@ function useAuth() {
         return;
       }
       if (session) carregarPerfilEOrganizacao(session);
-      else setState({ status: 'anonymous', session: null, profile: null, organization: null });
+      else {
+        setCurrentOrganizationId(null);
+        setState({ status: 'anonymous', session: null, profile: null, organization: null });
+      }
     });
 
     return () => {

@@ -19,9 +19,33 @@
   (`profiles`) e nome/telefone do negócio (`organizations`), e o botão
   "Sair da conta" desloga de verdade.
 
-O restante do frontend (Clientes, Orçamentos, OS, Agenda, Financeiro) ainda
-usa os mocks em `src/data/mockData.js` / `src/services/api.js` — isso é
-proposital, é o escopo da Fase 5/6 em diante.
+- **Fase 5 (parcial) concluída**: `clientesApi` em `src/services/api.js`
+  não usa mais mock — fala direto com a tabela `customers` via
+  `supabase-js`, com um mapeamento de campos (`nome`→`name`,
+  `telefone`→`phone`, `endereco`→`address`, `observacoes`→`notes`) para não
+  precisar tocar em `pages/clientes.js`, `dashboard.js`, `orcamentos.js` nem
+  `ordensServico.js`. Exclusão é soft delete (`deleted_at`). A organização
+  usada em cada chamada vem de `setCurrentOrganizationId()`, chamada pelo
+  `App.js` assim que a sessão resolve `organization` — nenhuma página passa
+  `organization_id` manualmente.
+- Catálogo de serviços (`services`) continua só com a tabela pronta — ainda
+  não existe nenhuma tela que consuma um catálogo de serviços (o formulário
+  de orçamento hoje só tem descrição livre), então não há API conectada
+  ainda para não construir uma camada sem uso real (ver "Pendências").
+
+Orçamentos, Ordens de Serviço, Agenda, Financeiro e Documentos ainda usam
+os mocks em `src/data/mockData.js` / `src/services/api.js` — isso é
+proposital, é o escopo da Fase 6 em diante.
+
+### Inconsistência transitória esperada (Clientes real + resto ainda mock)
+
+Os orçamentos/OS/financeiro mock em `mockData.js` referenciam clientes
+fake (`c1`..`c4`) que não existem mais como registros reais — agora que
+`clientesApi` fala com o Supabase, esses IDs não batem com nenhum cliente
+de verdade. Isso é esperado durante a transição: o nome do cliente vai
+aparecer como "—" nessas telas mock até a Fase 6 conectar Orçamentos/OS/
+Financeiro também. O formulário de "Novo orçamento" já usa a lista real de
+clientes (vazia até você cadastrar um em Clientes).
 
 ## Tabelas criadas (21) + 1 bucket de Storage
 
