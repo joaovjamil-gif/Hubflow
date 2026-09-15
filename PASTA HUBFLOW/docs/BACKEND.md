@@ -95,14 +95,16 @@ validado nas fases anteriores. Um teste manual no navegador (login real +
 criar cliente/orçamento/OS) continua sendo a validação que falta e que só
 dá para fazer fora deste sandbox.
 
-## Tabelas criadas (21) + 1 bucket de Storage
+## Tabelas criadas (23) + 1 bucket de Storage + 1 Edge Function
 
 `profiles`, `organizations`, `organization_members`, `customers`,
 `customer_contacts`, `services`, `quotes`, `quote_items`, `work_orders`,
 `work_order_items`, `calendar_events`, `suppliers`, `financial_categories`,
 `cost_centers`, `accounts_receivable`, `accounts_payable`, `transactions`,
 `documents` (+ bucket `documents`), `activity_logs`, `notifications`,
-`ai_requests`.
+`ai_requests`, `marketing_campaigns`, `marketing_contents` (Bloco 3, schema
+pronto, sem UI/geração ainda). Edge Function `ai-gateway` (Bloco 3, ver
+seção própria).
 
 ## Segurança (RLS)
 
@@ -147,12 +149,13 @@ dá para fazer fora deste sandbox.
   automaticamente uma organização pessoal (papel `owner`) no primeiro
   login de cada usuário — ponte deliberada até existir uma tela de gestão
   de organizações/membros/convites.
-- `Documentos`: schema e bucket prontos, mas a página não tem UI de upload
-  — só existe hoje um aviso informativo (Fase 7). Clientes já mostram uma
-  lista de leitura (`listDocumentosDaEntidade`), vazia até o upload existir.
-- `IA`: tabela `ai_requests` pronta para registrar solicitações, mas
-  nenhuma chamada externa de IA foi implementada (Fase 9, e apenas
-  mediante decisão explícita de qual modelo/API usar).
+- `IA`: a infraestrutura é real desde o Bloco 3 (Edge Function `ai-gateway`,
+  `services/aiService.js`, botão "Sugerir com IA" em Orçamentos, histórico
+  de solicitações na página IA) — mas nenhum provedor de IA está conectado
+  (`AI_PROVIDER_API_KEY` ausente), então toda chamada retorna
+  honestamente "não configurado". Não existe assistente central em
+  linguagem natural nem geração de conteúdo de marketing — só a fundação
+  (ver seção Bloco 3).
 - Edição de campos livres em orçamento já aprovado/OS já concluída, e
   exclusão (hard delete) de clientes/orçamentos/OS pela UI: as APIs
   suportam o necessário para o fluxo principal, mas não há botão de
@@ -260,6 +263,105 @@ não quebra nada. Todos os dados de teste foram removidos ao final —
 0 linhas em todas as tabelas ao terminar. `node --check` limpo em 100% dos
 `.js` do frontend. Mesma limitação já registrada nas fases anteriores:
 teste em navegador real não foi possível nesta sessão (rede do sandbox).
+
+## Bloco 3 — Storage real, notificações, IA (fundação), UI/UX e gráficos (em andamento)
+
+Migrations 0022-0025, aplicadas nesta ordem, + 1 Edge Function:
+
+- `0022_documents_extend.sql` — `documents` ganha `category`, `description`,
+  `updated_at`; `entity_type` passa a aceitar `supplier` (além de
+  `customer`/`quote`/`work_order`/`profile`/`organization`/`financial`).
+- `0023_notification_triggers.sql` — `create_notification()` + triggers em
+  `quotes` (aprovado/recusado), `work_orders` (criada com responsável,
+  atribuída, agendada, concluída) e `accounts_receivable`/`accounts_payable`
+  (pago) — toda notificação nasce no banco, nunca é responsabilidade da UI
+  lembrar de criar.
+- `0024_daily_alerts_cron.sql` — `pg_cron` + `run_daily_alerts()` (09h
+  diariamente): contas a receber/pagar vencendo em até 2 dias ou atrasadas,
+  e OS atrasadas — com deduplicação por entidade+dia.
+- `0025_marketing_schema_prep.sql` — `marketing_campaigns`/
+  `marketing_contents`, schema + RLS prontos, sem UI/geração ainda
+  (fundação, conforme pedido explícito de não avançar nos diferenciais).
+- Edge Function `ai-gateway` (`supabase/functions/ai-gateway/index.ts`):
+  autenticada, grava em `ai_requests` sob RLS, e responde honestamente
+  `not_configured` — nenhum provedor de IA (`AI_PROVIDER_API_KEY`) está
+  conectado, então nenhuma resposta de IA é inventada.
+
+Frontend novo/conectado nesta etapa:
+
+- `src/services/documents.js` — upload/list/signed URL/remove reais contra
+  o bucket `documents`; `components/documentsPanel.js` (painel reutilizável)
+  plugado em Clientes, Orçamentos, OS e Fornecedores; `pages/documentos.js`
+  reescrita como navegador real de documentos da organização (antes era só
+  um aviso "aguardando backend").
+- `src/services/notifications.js` + `components/notificationsBell.js` —
+  sino no topbar com contador, lista, marcar lida/todas lidas, link para a
+  entidade; polling de 30s (reforço opcional via Realtime, best-effort).
+- `src/services/aiService.js` + `aiContext.js` — único ponto de chamada de
+  IA do frontend (sempre via `ai-gateway`, nunca chave de provedor no
+  navegador); `pages/ia.js` reescrita para chamar o gateway de verdade e
+  mostrar histórico real de solicitações; botão "Sugerir com IA" em
+  Orçamentos com a mesma honestidade (mostra a mensagem real do gateway).
+- `components/ui.js` — novos componentes de design system: `Dropdown`,
+  `Tooltip`, `Timeline`, `Spinner`, `BarChart`, `DonutChart` (gráficos em
+  CSS puro, sem lib externa). Histórico de Clientes/Orçamentos/OS/
+  Fornecedores migrado para `Timeline`.
+- `App.js` — menu lateral agrupado (Visão geral/Gestão/Operação/
+  Financeiro/Inteligência/Sistema) e responsivo (menu hambúrguer + drawer
+  abaixo de 860px, corrigindo o bug de sidebar sumir sem substituto no
+  mobile).
+- `pages/dashboard.js` — cards agrupados por hierarquia (Financeiro /
+  Comercial e operação), gráfico de fluxo de caixa, distribuição de OS por
+  status e feed de atividade recente (`listRecentActivity`, novo em
+  `services/activity.js`).
+- `pages/financeiro.js` — gráfico de barras de receitas x despesas na aba
+  Fluxo de caixa.
+- `landing/index.html` — grade de recursos atualizada para refletir os
+  módulos reais atuais (Fornecedores/Documentos, Notificações), mantendo a
+  IA marcada como "Em construção" (nenhuma alegação de recurso que o
+  produto ainda não suporta).
+
+### Segurança desta etapa
+
+`get_advisors` (security) rodado após as 4 migrations novas: nenhum aviso
+novo introduzido — os únicos `WARN` existentes são funções helper
+pré-existentes (`is_org_member`/`is_org_admin`/`next_sequence_value`/
+`user_org_role`/`rls_auto_enable`), já cobertas e aceitas nas fases
+anteriores por serem apenas leitura de pertencimento, sem escalação de
+privilégio. `get_advisors` (performance) mostra só `INFO` sobre FKs
+`created_by` sem índice nas tabelas novas — mesmo padrão já aceito em
+todo o schema (campo de auditoria, não usado em filtro).
+
+### Testes desta etapa — validação parcial, com um problema em aberto
+
+Reaplicada a mesma técnica de validação das fases anteriores (usuário de
+teste real + `organization_members` + `request.jwt.claims` via
+`set_config`), cobrindo o fluxo Cliente → Orçamento → Aprovação → OS →
+Conclusão → Pagamento com as notificações novas:
+
+- ✅ Orçamento aprovado gera notificação "Orçamento aprovado".
+- ❌ **Em aberto**: a notificação "Nova OS atribuída" (trigger de INSERT em
+  `work_orders`, `notify_work_order_events`) não foi confirmada na última
+  rodada de teste — a asserção falhou (`count=0`) antes de a sessão ser
+  interrompida para investigação. Hipótese ainda não confirmada: o
+  `create_work_order`/fluxo de `approve_quote` pode não estar preenchendo
+  `responsible_id` no INSERT da OS (a função só notifica quando
+  `new.responsible_id is not null`), ou a RPC roda com um `auth.uid()`
+  diferente do usuário de teste dentro da transação. **Não foi corrigido
+  ainda** — os passos 3 e 4 do roteiro de teste (conclusão da OS e
+  pagamento) não chegaram a ser reexecutados após essa falha.
+- `node --check` limpo em 100% dos arquivos `.js` novos/alterados desta
+  etapa (confirmado antes de cada commit).
+- Teste em navegador real continua não sendo possível nesta sessão (mesma
+  limitação de rede do sandbox já registrada nas fases anteriores).
+
+**Próximo passo obrigatório antes de fechar o Bloco 3**: diagnosticar e
+corrigir a falha acima, reexecutar o roteiro de teste completo (incluindo
+conclusão de OS, pagamento e `run_daily_alerts()`), limpar os dados de
+teste, then só então atualizar esta seção para "concluído" e escrever o
+relatório final estruturado (Implementado/Banco/IA/Storage/Automação/
+UI-UX/Responsividade/Segurança/Testes/Bugs corrigidos/Pendências/Próximo
+passo) pedido para o fechamento deste bloco.
 
 ## Validação feita na Fase 3
 
